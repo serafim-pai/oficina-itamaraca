@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Oficina Itamaracá</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        max-width: 700px;
+        margin: 40px auto;
+        padding: 0 20px;
+        color: #222;
+    }
+    h1 {
+        text-align: center;
+        color: #1a3c6e;
+    }
+    h2 {
+        margin-top: 40px;
+        border-bottom: 2px solid #1a3c6e;
+        padding-bottom: 5px;
+    }
+    form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    label {
+        font-weight: bold;
+    }
+    input[type="text"], input[type="number"] {
+        padding: 6px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .checkbox-linha {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: normal;
+    }
+    button {
+        margin-top: 10px;
+        padding: 10px;
+        background-color: #1a3c6e;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    button:hover {
+        background-color: #14305a;
+    }
+    .erros {
+        background-color: #fdecea;
+        border: 1px solid #f5c2c0;
+        color: #611a15;
+        padding: 10px;
+        border-radius: 4px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+    }
+    th, td {
+        border: 1px solid #ccc;
+        padding: 8px;
+        text-align: left;
+    }
+    th {
+        background-color: #1a3c6e;
+        color: white;
+    }
+</style>
+</head>
+<body>
+    <h1>OFICINA ITAMARACÁ</h1>
+
+    {% if erros %}
+    <div class="erros">
+        <ul>
+            {% for erro in erros %}
+            <li>{{ erro }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <h2>Cadastrar veículo</h2>
+    <form method="POST" action="{{ url_for('cadastrar_veiculo') }}">
+        <label for="responsavel">Nome do responsável</label>
+        <input type="text" id="responsavel" name="responsavel" value="{{ dados.get('responsavel', '') }}">
+
+        <label for="placa">Placa *</label>
+        <input type="text" id="placa" name="placa" value="{{ dados.get('placa', '') }}">
+
+        <label for="marca">Marca</label>
+        <input type="text" id="marca" name="marca" value="{{ dados.get('marca', '') }}">
+
+        <label for="modelo">Modelo</label>
+        <input type="text" id="modelo" name="modelo" value="{{ dados.get('modelo', '') }}">
+
+        <label for="cor">Cor</label>
+        <input type="text" id="cor" name="cor" value="{{ dados.get('cor', '') }}">
+
+        <label for="ano">Ano</label>
+        <input type="text" id="ano" name="ano" value="{{ dados.get('ano', '') }}">
+
+        <label for="quilometragem">Quilometragem</label>
+        <input type="text" id="quilometragem" name="quilometragem" value="{{ dados.get('quilometragem', '') }}">
+
+        <div class="checkbox-linha">
+            <input type="checkbox" id="documento_deixado" name="documento_deixado">
+            <label for="documento_deixado">Documento do carro (original ou cópia impressa) foi deixado na oficina *</label>
+        </div>
+
+        <button type="submit">Cadastrar</button>
+    </form>
+
+    <h2>Veículos cadastrados</h2>
+    {% if veiculos %}
+    <table>
+        <tr>
+            <th>Responsável</th>
+            <th>Placa</th>
+            <th>Marca</th>
+            <th>Modelo</th>
+            <th>Cor</th>
+            <th>Ano</th>
+            <th>Km</th>
+            <th>Documento deixado</th>
+        </tr>
+        {% for v in veiculos %}
+        <tr>
+            <td>{{ v['responsavel'] }}</td>
+            <td>{{ v['placa'] }}</td>
+            <td>{{ v['marca'] }}</td>
+            <td>{{ v['modelo'] }}</td>
+            <td>{{ v['cor'] }}</td>
+            <td>{{ v['ano'] }}</td>
+            <td>{{ v['quilometragem'] }}</td>
+            <td>{{ 'Sim' if v['documento_deixado'] else 'Não' }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>Nenhum veículo cadastrado ainda.</p>
+    {% endif %}
+</body>
+</html>
