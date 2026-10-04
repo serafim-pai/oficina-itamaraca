@@ -1,8 +1,13 @@
+import os
 import sqlite3
 
 from flask import Flask, g, redirect, render_template, request, url_for
 
-DATABASE = "oficina.db"
+# O banco fica ao lado deste arquivo, de onde quer que o sistema seja ligado
+# (na hospedagem online a pasta de trabalho é outra). OFICINA_DB troca o caminho nos testes.
+DATABASE = os.environ.get("OFICINA_DB") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "oficina.db"
+)
 
 app = Flask(__name__)
 
@@ -40,6 +45,10 @@ def init_db():
     )
     db.commit()
     db.close()
+
+
+# Cria a tabela ao carregar o sistema (também na hospedagem, que não roda o bloco abaixo)
+init_db()
 
 
 @app.route("/")
@@ -101,5 +110,4 @@ def cadastrar_veiculo():
 
 
 if __name__ == "__main__":
-    init_db()
     app.run(debug=True)
