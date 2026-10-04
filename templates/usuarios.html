@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usuários - Oficina Itamaracá</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+    {% include '_menu.html' %}
+    <h1>Usuários</h1>
+
+    {% if erro %}
+    <div class="erros">{{ erro }}</div>
+    {% endif %}
+
+    <h2>Novo usuário</h2>
+    <form method="POST" action="{{ url_for('usuarios') }}" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="nome">Nome</label>
+        <input type="text" id="nome" name="nome" value="{{ dados['nome'] }}" maxlength="100">
+
+        <label for="email">E-mail</label>
+        <input type="text" id="email" name="email" value="{{ dados['email'] }}" maxlength="120">
+
+        <label for="senha">Senha (mínimo 8 caracteres)</label>
+        <input type="password" id="senha" name="senha" autocomplete="new-password">
+
+        <label for="tipo">Tipo</label>
+        <select id="tipo" name="tipo">
+            <option value="FUNCIONARIO" {% if dados['tipo'] != 'DONO' %}selected{% endif %}>Funcionário</option>
+            <option value="DONO" {% if dados['tipo'] == 'DONO' %}selected{% endif %}>Dono</option>
+        </select>
+        <button type="submit">Criar usuário</button>
+    </form>
+
+    <h2>Quem pode entrar</h2>
+    <table>
+        <tr><th>Nome</th><th>E-mail</th><th>Tipo</th><th>Situação</th><th>Ação</th></tr>
+        {% for u in lista %}
+        <tr>
+            <td>{{ u['nome'] }}</td>
+            <td>{{ u['email'] }}</td>
+            <td>{{ 'Dono' if u['tipo'] == 'DONO' else 'Funcionário' }}</td>
+            <td>{% if u['ativo'] %}Ativo{% else %}<span class="bloqueado">Bloqueado</span>{% endif %}</td>
+            <td class="acoes">
+                {% if u['id'] != usuario['id'] %}
+                <form method="POST" action="{{ url_for('alternar_usuario', id=u['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit">{{ 'Bloquear' if u['ativo'] else 'Desbloquear' }}</button>
+                </form>
+                {% else %}(você){% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

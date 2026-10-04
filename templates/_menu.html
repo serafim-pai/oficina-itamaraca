@@ -1,0 +1,15 @@
+<nav>
+    <a href="{{ url_for('index') }}">🚗 Veículos</a>
+    {% if usuario and usuario['tipo'] == 'DONO' %}
+    <a href="{{ url_for('usuarios') }}">🔐 Usuários</a>
+    {% endif %}
+    {% if usuario %}
+    <span class="quem">
+        <span>👤 {{ usuario['nome'] }} <span class="etiqueta">{{ 'DONO' if usuario['tipo'] == 'DONO' else 'FUNCIONÁRIO' }}</span></span>
+        <form method="POST" action="{{ url_for('sair') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit">Sair</button>
+        </form>
+    </span>
+    {% endif %}
+</nav>

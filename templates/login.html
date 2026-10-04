@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ 'Entrar' if modo == 'login' else 'Primeiro acesso' }} - Oficina Itamaracá</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+    <div class="caixa-login">
+        {% if modo == 'login' %}
+        <h1>Entrar</h1>
+        <p class="aviso">Digite seu e-mail e sua senha.</p>
+        {% else %}
+        <h1>Primeiro acesso</h1>
+        <p class="aviso">Crie o usuário <strong>DONO</strong> da oficina. Ele poderá criar os funcionários.</p>
+        {% endif %}
+
+        {% if erro %}
+        <div class="erros">{{ erro }}</div>
+        {% endif %}
+
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if modo == 'primeiro' %}
+            {% if pede_codigo %}
+            <label for="codigo">Código de instalação</label>
+            <input type="text" id="codigo" name="codigo" autocomplete="off">
+            {% endif %}
+            <label for="nome">Seu nome</label>
+            <input type="text" id="nome" name="nome" value="{{ nome }}" maxlength="100">
+            {% endif %}
+
+            <label for="email">E-mail</label>
+            <input type="text" id="email" name="email" value="{{ email }}" maxlength="120" autocomplete="username">
+
+            <label for="senha">Senha{% if modo == 'primeiro' %} (mínimo 8 caracteres){% endif %}</label>
+            <input type="password" id="senha" name="senha" autocomplete="{{ 'current-password' if modo == 'login' else 'new-password' }}">
+
+            {% if modo == 'primeiro' %}
+            <label for="senha2">Repita a senha</label>
+            <input type="password" id="senha2" name="senha2" autocomplete="new-password">
+            {% endif %}
+
+            <button type="submit">{{ 'Entrar' if modo == 'login' else 'Criar dono e entrar' }}</button>
+        </form>
+    </div>
+</body>
+</html>

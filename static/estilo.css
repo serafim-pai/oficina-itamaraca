@@ -1,0 +1,103 @@
+body {
+    font-family: Arial, sans-serif;
+    max-width: 700px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: #222;
+}
+h1 {
+    text-align: center;
+    color: #1a3c6e;
+}
+h2 {
+    margin-top: 40px;
+    border-bottom: 2px solid #1a3c6e;
+    padding-bottom: 5px;
+}
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+label {
+    font-weight: bold;
+}
+input[type="text"], input[type="number"], input[type="password"], select {
+    padding: 6px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.checkbox-linha {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: normal;
+}
+button {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #1a3c6e;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+button:hover {
+    background-color: #14305a;
+}
+.erros {
+    background-color: #fdecea;
+    border: 1px solid #f5c2c0;
+    color: #611a15;
+    padding: 10px;
+    border-radius: 4px;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+}
+th {
+    background-color: #1a3c6e;
+    color: white;
+}
+
+/* Menu de cima */
+nav {
+    background-color: #1a3c6e;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    color: white;
+}
+nav a { color: white; text-decoration: none; font-weight: bold; padding: 4px 8px; border-radius: 4px; }
+nav a:hover { background-color: #14305a; }
+nav .quem { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 14px; }
+nav .etiqueta { background: white; color: #1a3c6e; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: bold; }
+nav form { display: inline; }
+nav button { margin: 0; padding: 4px 10px; background-color: #0e2342; }
+
+/* Login */
+.caixa-login { max-width: 380px; margin: 60px auto; border-top: 5px solid #1a3c6e; padding: 20px 24px;
+               border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,0.15); }
+.caixa-login h1 { margin-top: 0; }
+.aviso { color: #555; font-size: 14px; }
+
+/* Tela de usuários */
+td.acoes form { display: inline; }
+td.acoes button { margin: 0; padding: 4px 10px; }
+.bloqueado { color: #8a1c1c; font-weight: bold; }
+
+@media (max-width: 600px) {
+    body { margin: 15px auto; }
+    table { display: block; overflow-x: auto; }
+}

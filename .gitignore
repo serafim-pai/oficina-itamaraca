@@ -1,3 +1,6 @@
 oficina.db
 __pycache__/
 *.pyc
+
+# Chave secreta do login (cada computador tem a sua)
+chave_secreta.txt
