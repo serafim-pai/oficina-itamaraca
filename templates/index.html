@@ -20,7 +20,7 @@
     {% endif %}
 
     <h2>Cadastrar veículo</h2>
-    <form method="POST" action="{{ url_for('cadastrar_veiculo') }}">
+    <form method="POST" action="{{ url_for('cadastrar_veiculo') }}" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="responsavel">Nome do responsável</label>
         <input type="text" id="responsavel" name="responsavel" value="{{ dados.get('responsavel', '') }}">
@@ -43,6 +43,12 @@
         <label for="quilometragem">Quilometragem</label>
         <input type="text" id="quilometragem" name="quilometragem" value="{{ dados.get('quilometragem', '') }}">
 
+        <label for="fotos">Fotos do veículo (opcional)</label>
+        <input type="file" id="fotos" name="fotos" accept="image/*" multiple>
+        <span class="aviso">Até {{ max_fotos }} fotos de {{ max_mb }} MB cada (JPG, PNG, WEBP ou GIF). Dá para tirar pela câmera do celular.</span>
+        <div id="aviso-fotos" class="erros" style="display:none"></div>
+        <div id="previa-fotos" class="fotos"></div>
+
         <div class="checkbox-linha">
             <input type="checkbox" id="documento_deixado" name="documento_deixado">
             <label for="documento_deixado">Documento do carro (original ou cópia impressa) foi deixado na oficina *</label>
@@ -53,10 +59,12 @@
 
     <h2>Veículos cadastrados</h2>
     {% if veiculos %}
+    <div class="tabela-rolavel">
     <table>
         <tr>
             <th>Responsável</th>
             <th>Placa</th>
+            <th>Fotos</th>
             <th>Marca</th>
             <th>Modelo</th>
             <th>Cor</th>
@@ -68,6 +76,13 @@
         <tr>
             <td>{{ v['responsavel'] }}</td>
             <td>{{ v['placa'] }}</td>
+            <td class="fotos">
+                {% for foto_id in fotos.get(v['id'], []) %}
+                <a href="{{ url_for('foto', id=foto_id) }}" target="_blank" rel="noopener">
+                    <img src="{{ url_for('foto_miniatura', id=foto_id) }}" alt="Foto do veículo {{ v['placa'] }}" loading="lazy">
+                </a>
+                {% else %}-{% endfor %}
+            </td>
             <td>{{ v['marca'] }}</td>
             <td>{{ v['modelo'] }}</td>
             <td>{{ v['cor'] }}</td>
@@ -77,8 +92,35 @@
         </tr>
         {% endfor %}
     </table>
+    </div>
     {% else %}
     <p>Nenhum veículo cadastrado ainda.</p>
     {% endif %}
+
+    <script>
+        // Mostra uma prévia das fotos escolhidas e avisa logo se alguma passa do limite
+        // (o servidor confere tudo de novo; isto é só para ajudar quem está digitando).
+        const MAX_FOTOS = {{ max_fotos }};
+        const MAX_BYTES = {{ max_mb }} * 1024 * 1024;
+        const campo = document.getElementById('fotos');
+        campo.addEventListener('change', () => {
+            const previa = document.getElementById('previa-fotos');
+            const aviso = document.getElementById('aviso-fotos');
+            previa.innerHTML = '';
+            const problemas = [];
+            const arquivos = Array.from(campo.files);
+            if (arquivos.length > MAX_FOTOS) problemas.push('Escolha no máximo ' + MAX_FOTOS + ' fotos.');
+            arquivos.forEach(arquivo => {
+                if (arquivo.size > MAX_BYTES) problemas.push('"' + arquivo.name + '" passa de {{ max_mb }} MB.');
+                const img = document.createElement('img');
+                img.alt = arquivo.name;
+                img.src = URL.createObjectURL(arquivo);
+                img.onload = () => URL.revokeObjectURL(img.src);
+                previa.appendChild(img);
+            });
+            aviso.style.display = problemas.length ? 'block' : 'none';
+            aviso.textContent = problemas.join(' ');
+        });
+    </script>
 </body>
 </html>

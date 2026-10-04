@@ -92,6 +92,16 @@ nav button { margin: 0; padding: 4px 10px; background-color: #0e2342; }
 .caixa-login h1 { margin-top: 0; }
 .aviso { color: #555; font-size: 14px; }
 
+/* Fotos do veículo */
+.fotos { display: flex; flex-wrap: wrap; gap: 6px; }
+td.fotos { display: table-cell; min-width: 150px; }
+td.fotos a { display: inline-block; }
+.fotos img { width: 64px; height: 64px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; margin: 2px; }
+td.fotos img { width: 48px; height: 48px; }
+.tabela-rolavel { overflow-x: auto; }
+.fotos a:hover img { border-color: #1a3c6e; }
+input[type="file"] { padding: 6px 0; }
+
 /* Tela de usuários */
 td.acoes form { display: inline; }
 td.acoes button { margin: 0; padding: 4px 10px; }

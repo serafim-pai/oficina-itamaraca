@@ -4,3 +4,6 @@ __pycache__/
 
 # Chave secreta do login (cada computador tem a sua)
 chave_secreta.txt
+
+# Fotos dos veículos (dados dos clientes: nunca vão para o GitHub)
+fotos/

@@ -5,6 +5,10 @@ Sistema de oficina mecânica (projeto de prática). Histórias de usuário em [H
 ## O que faz hoje
 - **Cadastrar veículo**: responsável, placa, marca, modelo, cor, ano e quilometragem.
 - Não salva sem a **placa** e sem marcar que o **documento do carro** foi deixado na oficina.
+- **Fotos do veículo** (opcional) na mesma tela de cadastro: até 10 fotos de 8 MB cada (JPG, PNG, WEBP ou GIF), com prévia antes de enviar e miniaturas na lista (clique para ver a foto inteira).
+  - O sistema confere o **conteúdo** do arquivo (não o nome), reduz a foto para no máximo 1600 px, endireita fotos de celular e **remove os dados escondidos**, como a localização GPS.
+  - Se qualquer foto for recusada, **nada** é cadastrado (nem o veículo, nem as outras fotos).
+  - As fotos ficam na pasta `fotos/` (fora do GitHub e fora da pasta pública) e só aparecem para quem entrou no sistema.
 
 ## Login e usuários
 - **Ninguém usa o sistema sem entrar** com e-mail e senha. As senhas são guardadas protegidas (nunca "abertas"), com no mínimo 8 caracteres.

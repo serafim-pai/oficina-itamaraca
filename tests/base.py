@@ -8,6 +8,7 @@ from contextlib import closing
 
 _pasta = tempfile.mkdtemp()
 os.environ["OFICINA_DB"] = os.path.join(_pasta, "teste.db")   # tem que vir ANTES de importar o sistema
+os.environ["OFICINA_FOTOS"] = os.path.join(_pasta, "fotos")
 os.environ["OFICINA_SECRET"] = "segredo-so-dos-testes"
 os.environ.pop("OFICINA_CODIGO_INICIAL", None)
 
@@ -24,8 +25,10 @@ class BaseTest(unittest.TestCase):
     def setUp(self):
         oficina.app.config["TESTING"] = True
         oficina.app.config["WTF_CSRF_ENABLED"] = self.csrf
-        for tabela in ("veiculos", "usuarios", "tentativas_login"):
+        for tabela in ("veiculos", "usuarios", "tentativas_login", "fotos"):
             self.sql(f"DELETE FROM {tabela}")
+        for arquivo in os.listdir(oficina.PASTA_FOTOS):
+            os.remove(os.path.join(oficina.PASTA_FOTOS, arquivo))
         self.c = oficina.app.test_client()
 
     # ---- atalhos ----

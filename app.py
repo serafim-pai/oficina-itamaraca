@@ -3,10 +3,13 @@ import re
 import secrets
 import sqlite3
 from datetime import timedelta
+from io import BytesIO
 
-from flask import (Flask, abort, g, redirect, render_template, request,
-                   session, url_for)
+from flask import (Flask, Response, abort, g, redirect, render_template, request,
+                   send_from_directory, session, url_for)
 from flask_wtf.csrf import CSRFError, CSRFProtect
+from markupsafe import escape
+from PIL import Image, ImageOps
 from werkzeug.security import check_password_hash, generate_password_hash
 
 # O banco fica ao lado deste arquivo, de onde quer que o sistema seja ligado
@@ -15,7 +18,20 @@ DATABASE = os.environ.get("OFICINA_DB") or os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "oficina.db"
 )
 
+# As fotos ficam numa pasta ao lado do sistema, FORA da pasta pública (static): só quem
+# entrou consegue vê-las, pela rota /fotos/<n>. OFICINA_FOTOS troca a pasta nos testes.
+PASTA_FOTOS = os.environ.get("OFICINA_FOTOS") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "fotos"
+)
+MAX_FOTOS = 10                       # fotos por cadastro
+MAX_BYTES_FOTO = 8 * 1024 * 1024     # tamanho máximo de cada foto enviada
+MAX_PIXELS_FOTO = 40_000_000         # evita imagens "bomba" que travariam o servidor
+LADO_FOTO = 1600                     # a foto guardada é reduzida para caber nesse tamanho
+LADO_MINIATURA = 320
+FORMATOS_DE_FOTO = {"JPEG", "PNG", "WEBP", "GIF"}
+
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 60 * 1024 * 1024     # tamanho máximo de um envio inteiro
 
 
 # ---------- CHAVE SECRETA (protege o login) ----------
@@ -84,6 +100,16 @@ def init_db():
     )
     db.execute(
         """
+        CREATE TABLE IF NOT EXISTS fotos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            veiculo_id INTEGER NOT NULL,
+            arquivo TEXT NOT NULL,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    db.execute(
+        """
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
@@ -106,6 +132,7 @@ def init_db():
     )
     db.commit()
     db.close()
+    os.makedirs(PASTA_FOTOS, exist_ok=True)
 
 
 # Cria as tabelas ao carregar o sistema (também na hospedagem, que não roda o bloco do final)
@@ -309,11 +336,104 @@ def alternar_usuario(id):
 
 # ---------- VEÍCULOS ----------
 
-@app.route("/")
-def index():
+def pagina_inicial(erros=None, dados=None):
+    """Desenha a tela de cadastro com a lista de veículos e as fotos de cada um."""
     db = get_db()
     veiculos = db.execute("SELECT * FROM veiculos ORDER BY id DESC").fetchall()
-    return render_template("index.html", veiculos=veiculos, erros=[], dados={})
+    fotos = {}
+    for foto in db.execute("SELECT id, veiculo_id FROM fotos ORDER BY id"):
+        fotos.setdefault(foto["veiculo_id"], []).append(foto["id"])
+    return render_template("index.html", veiculos=veiculos, fotos=fotos, erros=erros or [],
+                           dados=dados or {}, max_fotos=MAX_FOTOS,
+                           max_mb=MAX_BYTES_FOTO // (1024 * 1024))
+
+
+@app.route("/")
+def index():
+    return pagina_inicial()
+
+
+@app.errorhandler(413)
+def envio_grande_demais(erro):
+    """O envio inteiro passou do limite. Resposta simples, sem dados do sistema."""
+    texto = ("Os arquivos enviados passaram do tamanho permitido. "
+             f"Envie até {MAX_FOTOS} fotos de até {MAX_BYTES_FOTO // (1024 * 1024)} MB cada.")
+    voltar = escape(url_for("index"))
+    return Response(f'<meta charset="UTF-8"><p>{texto}</p><p><a href="{voltar}">Voltar</a></p>',
+                    status=413, mimetype="text/html")
+
+
+# ---------- FOTOS DOS VEÍCULOS ----------
+
+def preparar_foto(arquivo):
+    """Confere uma foto enviada e a prepara para guardar.
+    Devolve (erro, None) ou (None, (foto_grande, miniatura)), as duas em JPEG.
+    - só aceita imagem de verdade (confere o conteúdo, não o nome do arquivo);
+    - gira conforme o celular e REMOVE os dados escondidos da foto (como a localização GPS);
+    - reduz o tamanho, para o sistema não ficar pesado."""
+    nome = (arquivo.filename or "foto")[:60]
+    dados = arquivo.read(MAX_BYTES_FOTO + 1)
+    if len(dados) > MAX_BYTES_FOTO:
+        return f'A foto "{nome}" é grande demais (máximo {MAX_BYTES_FOTO // (1024 * 1024)} MB).', None
+    invalida = f'O arquivo "{nome}" não é uma foto válida. Use JPG, PNG, WEBP ou GIF.'
+    try:
+        imagem = Image.open(BytesIO(dados))
+        if imagem.format not in FORMATOS_DE_FOTO:
+            return invalida, None
+        if imagem.width * imagem.height > MAX_PIXELS_FOTO:
+            return f'A foto "{nome}" tem resolução alta demais.', None
+        imagem.load()                                   # lê a imagem inteira (pega arquivos cortados)
+        imagem = ImageOps.exif_transpose(imagem)        # endireita a foto, como o celular mostrava
+        if imagem.mode in ("RGBA", "LA") or (imagem.mode == "P" and "transparency" in imagem.info):
+            imagem = imagem.convert("RGBA")
+            fundo = Image.new("RGB", imagem.size, "white")
+            fundo.paste(imagem, mask=imagem.split()[-1])
+            imagem = fundo
+        else:
+            imagem = imagem.convert("RGB")
+        saidas = []
+        for lado in (LADO_FOTO, LADO_MINIATURA):
+            copia = imagem.copy()
+            copia.thumbnail((lado, lado))
+            memoria = BytesIO()
+            copia.save(memoria, "JPEG", quality=85, optimize=True)   # sem EXIF: nada de GPS
+            saidas.append(memoria.getvalue())
+    except Exception:    # arquivo estragado, formato estranho, etc.
+        return invalida, None
+    return None, tuple(saidas)
+
+
+def guardar_fotos(db, veiculo_id, fotos, criados):
+    """Grava os arquivos das fotos e registra no banco.
+    Cada arquivo é anotado em 'criados' assim que nasce, para dar para apagar tudo se algo falhar no meio."""
+    for grande, miniatura in fotos:
+        codigo = secrets.token_hex(16)     # nome sorteado: o nome original nunca vira caminho
+        for sufixo, conteudo in (("", grande), ("_m", miniatura)):
+            caminho = os.path.join(PASTA_FOTOS, f"{codigo}{sufixo}.jpg")
+            criados.append(caminho)
+            with open(caminho, "wb") as f:
+                f.write(conteudo)
+        db.execute("INSERT INTO fotos (veiculo_id, arquivo) VALUES (?, ?)", (veiculo_id, codigo))
+
+
+def enviar_foto(id, sufixo):
+    linha = get_db().execute("SELECT arquivo FROM fotos WHERE id = ?", (id,)).fetchone()
+    if not linha:
+        abort(404)
+    resposta = send_from_directory(PASTA_FOTOS, f"{linha['arquivo']}{sufixo}.jpg", mimetype="image/jpeg")
+    resposta.headers["Cache-Control"] = "private, max-age=86400"    # só o navegador de quem entrou guarda
+    resposta.headers["X-Content-Type-Options"] = "nosniff"
+    return resposta
+
+
+@app.route("/fotos/<int:id>")
+def foto(id):
+    return enviar_foto(id, "")
+
+
+@app.route("/fotos/<int:id>/miniatura")
+def foto_miniatura(id):
+    return enviar_foto(id, "_m")
 
 
 @app.route("/veiculos", methods=["POST"])
@@ -338,32 +458,52 @@ def cadastrar_veiculo():
             "(original ou cópia impressa) foi deixado na oficina."
         )
 
+    # Fotos (opcionais): confere todas antes de guardar qualquer coisa
+    arquivos = [a for a in request.files.getlist("fotos") if a and a.filename]
+    preparadas = []
+    if len(arquivos) > MAX_FOTOS:
+        erros.append(f"Envie no máximo {MAX_FOTOS} fotos de uma vez.")
+    else:
+        for arquivo in arquivos:
+            erro_foto, pronta = preparar_foto(arquivo)
+            if erro_foto:
+                erros.append(erro_foto)
+            else:
+                preparadas.append(pronta)
+    if erros and arquivos:
+        erros.append("Por segurança do navegador, as fotos precisam ser escolhidas de novo.")
+
     if erros:
-        db = get_db()
-        veiculos = db.execute("SELECT * FROM veiculos ORDER BY id DESC").fetchall()
-        return render_template(
-            "index.html", veiculos=veiculos, erros=erros, dados=dados
-        )
+        return pagina_inicial(erros, dados)
 
     db = get_db()
-    db.execute(
-        """
-        INSERT INTO veiculos
-            (responsavel, placa, marca, modelo, cor, ano, quilometragem, documento_deixado)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            dados["responsavel"],
-            dados["placa"],
-            dados["marca"],
-            dados["modelo"],
-            dados["cor"],
-            dados["ano"],
-            dados["quilometragem"],
-            1,
-        ),
-    )
-    db.commit()
+    criados = []
+    try:
+        cursor = db.execute(
+            """
+            INSERT INTO veiculos
+                (responsavel, placa, marca, modelo, cor, ano, quilometragem, documento_deixado)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                dados["responsavel"],
+                dados["placa"],
+                dados["marca"],
+                dados["modelo"],
+                dados["cor"],
+                dados["ano"],
+                dados["quilometragem"],
+                1,
+            ),
+        )
+        guardar_fotos(db, cursor.lastrowid, preparadas, criados)
+        db.commit()
+    except Exception:
+        db.rollback()
+        for caminho in criados:     # não deixa foto "órfã" no disco
+            if os.path.exists(caminho):
+                os.remove(caminho)
+        raise
     return redirect(url_for("index"))
 
 
