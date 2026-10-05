@@ -61,6 +61,7 @@
             <th>Tipo</th>
             <th>Problema</th>
             <th>Como resolver</th>
+            <th>Valor</th>
             <th>Registrado por</th>
             <th>Data</th>
             {% if usuario and usuario['tipo'] == 'DONO' %}<th></th>{% endif %}
@@ -78,6 +79,18 @@
                 </form>
                 {% if s['como_resolver'] %}<span class="aviso">Por {{ s['resolvido_por'] }}</span>{% endif %}
             </td>
+            <td class="valor">
+                {% if usuario and usuario['tipo'] == 'DONO' %}
+                <form method="POST" action="{{ url_for('registrar_valor', id=veiculo['id'], servico_id=s['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="text" name="valor" inputmode="decimal" placeholder="0,00" aria-label="Valor do serviço"
+                           value="{{ formatar_dinheiro(s['valor_centavos'], false) if s['valor_centavos'] is not none else '' }}">
+                    <button type="submit">{{ 'Atualizar' if s['valor_centavos'] is not none else 'Salvar' }}</button>
+                </form>
+                {% else %}
+                {{ formatar_dinheiro(s['valor_centavos']) if s['valor_centavos'] is not none else '-' }}
+                {% endif %}
+            </td>
             <td>{{ s['registrado_por'] }}</td>
             <td>{{ s['criado_em'] }}</td>
             {% if usuario and usuario['tipo'] == 'DONO' %}
@@ -92,6 +105,18 @@
         </tr>
         {% endfor %}
     </table>
+    </div>
+
+    <div class="orcamento">
+        <h2>Orçamento</h2>
+        {% if orcamento_completo %}
+        <p><strong>Valor total do orçamento: {{ formatar_dinheiro(total_centavos) }}</strong></p>
+        {% else %}
+        <p>Orçamento incompleto: falta informar o valor de {{ faltam_valor }} serviço{{ 's' if faltam_valor != 1 else '' }}.</p>
+        {% if total_centavos %}
+        <p>Soma dos valores já informados: {{ formatar_dinheiro(total_centavos) }}</p>
+        {% endif %}
+        {% endif %}
     </div>
     {% else %}
     <p>Nenhum problema registrado ainda.</p>

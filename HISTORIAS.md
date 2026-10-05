@@ -45,6 +45,18 @@ Critérios de aceitação:
 - Dá para corrigir a solução depois.
 - Fica guardado quem escreveu.
 
+## História 5 - Montar o orçamento
+Como dono da oficina, quero montar o orçamento com o valor de cada
+serviço registrado, para informar ao cliente quanto vai custar.
+
+Critérios de aceitação:
+- Cada problema/serviço registrado tem um campo de valor (em reais).
+- Só o dono define ou corrige o valor de um serviço.
+- O valor total do orçamento é a soma dos valores de todos os
+  serviços registrados para o veículo.
+- O orçamento só é considerado completo quando todos os serviços do
+  veículo têm valor definido.
+
 ## História 8 - Registrar a garantia
 Como dono da oficina, quero registrar o tempo de garantia de cada
 serviço e as condições que cancelam a garantia, para o cliente sair

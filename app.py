@@ -26,6 +26,7 @@ PASTA_FOTOS = os.environ.get("OFICINA_FOTOS") or os.path.join(
 TIPOS_SERVICO = ("LATARIA", "PINTURA", "MECÂNICA", "ELÉTRICA", "SUSPENSÃO", "FREIOS",
                  "POLIMENTO E ESTÉTICA", "OUTRO")
 MAX_PROBLEMA = 500                   # letras da descrição de um problema
+MAX_VALOR_CENTAVOS = 100_000_000     # limite de sanidade: R$ 1.000.000,00 por serviço
 MAX_FOTOS = 10                       # fotos por cadastro
 MAX_BYTES_FOTO = 8 * 1024 * 1024     # tamanho máximo de cada foto enviada
 MAX_PIXELS_FOTO = 40_000_000         # evita imagens "bomba" que travariam o servidor
@@ -151,6 +152,9 @@ def init_db():
         db.execute("ALTER TABLE servicos ADD COLUMN como_resolver TEXT")
     if "resolvido_por" not in colunas:
         db.execute("ALTER TABLE servicos ADD COLUMN resolvido_por TEXT")
+    # Banco criado antes da história 5 ainda não tem a coluna do valor (em centavos)
+    if "valor_centavos" not in colunas:
+        db.execute("ALTER TABLE servicos ADD COLUMN valor_centavos INTEGER")
     db.commit()
     db.close()
     os.makedirs(PASTA_FOTOS, exist_ok=True)
@@ -542,9 +546,14 @@ def pagina_veiculo(id, erros=None, dados=None):
     veiculo = buscar_veiculo(db, id)
     servicos = db.execute("SELECT * FROM servicos WHERE veiculo_id = ? ORDER BY id", (id,)).fetchall()
     fotos = [f["id"] for f in db.execute("SELECT id FROM fotos WHERE veiculo_id = ? ORDER BY id", (id,))]
+    total_centavos = sum(s["valor_centavos"] or 0 for s in servicos)
+    faltam = sum(1 for s in servicos if s["valor_centavos"] is None)
+    orcamento_completo = bool(servicos) and faltam == 0
     return render_template("veiculo.html", veiculo=veiculo, servicos=servicos, fotos=fotos,
                            tipos=TIPOS_SERVICO, max_problema=MAX_PROBLEMA,
-                           erros=erros or [], dados=dados or {})
+                           erros=erros or [], dados=dados or {},
+                           total_centavos=total_centavos, faltam_valor=faltam,
+                           orcamento_completo=orcamento_completo, formatar_dinheiro=formatar_dinheiro)
 
 
 @app.route("/veiculos/<int:id>")
@@ -596,6 +605,58 @@ def registrar_resolucao(id, servico_id):
 
     db.execute("UPDATE servicos SET como_resolver = ?, resolvido_por = ? WHERE id = ?",
                (texto, g.usuario["nome"], servico_id))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+def interpretar_valor(texto):
+    """Lê um valor em reais digitado pelo usuário (ex: "150,00", "150.00" ou "150").
+    Devolve os centavos (inteiro) ou None se o texto não for um valor válido (vazio, negativo,
+    zero ou com letras)."""
+    texto = texto.strip().upper().replace("R$", "").replace(" ", "")
+    if not texto:
+        return None
+    if "," in texto:
+        inteiro, _, centavos = texto.rpartition(",")
+        inteiro = inteiro.replace(".", "")
+    elif "." in texto and len(texto.rsplit(".", 1)[1]) == 2:
+        inteiro, _, centavos = texto.rpartition(".")
+        inteiro = inteiro.replace(".", "")
+    else:
+        inteiro, centavos = texto.replace(".", ""), "00"
+    if not inteiro.isdigit() or len(centavos) != 2 or not centavos.isdigit():
+        return None
+    valor = int(inteiro) * 100 + int(centavos)
+    if valor <= 0 or valor > MAX_VALOR_CENTAVOS:
+        return None
+    return valor
+
+
+def formatar_dinheiro(centavos, com_simbolo=True):
+    """Formata centavos como "R$ 1.234,56" (ou só "1.234,56", sem o símbolo)."""
+    reais, cents = divmod(centavos, 100)
+    texto = f"{reais:,}".replace(",", ".")
+    valor = f"{texto},{cents:02d}"
+    return f"R$ {valor}" if com_simbolo else valor
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/valor", methods=["POST"])
+def registrar_valor(id, servico_id):
+    """História 5: define o valor (em R$) de um serviço, para montar o orçamento.
+    Só o dono define ou corrige o valor."""
+    so_dono()
+    db = get_db()
+    buscar_veiculo(db, id)
+    servico = db.execute("SELECT id FROM servicos WHERE id = ? AND veiculo_id = ?",
+                         (servico_id, id)).fetchone()
+    if not servico:
+        abort(404)
+    centavos = interpretar_valor(request.form.get("valor", ""))
+
+    if centavos is None:
+        return pagina_veiculo(id, ["Informe um valor válido para o serviço (exemplo: 150,00)."])
+
+    db.execute("UPDATE servicos SET valor_centavos = ? WHERE id = ?", (centavos, servico_id))
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
 

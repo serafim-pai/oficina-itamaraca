@@ -108,6 +108,11 @@ td.acoes button { margin: 0; padding: 4px 10px; }
 td.resolucao { min-width: 200px; }
 td.resolucao form { gap: 4px; }
 td.resolucao button { margin-top: 0; padding: 4px 10px; }
+td.valor { min-width: 110px; }
+td.valor form { gap: 4px; }
+td.valor input { width: 90px; }
+td.valor button { margin-top: 0; padding: 4px 10px; }
+.orcamento { margin-top: 20px; }
 .bloqueado { color: #8a1c1c; font-weight: bold; }
 
 @media (max-width: 600px) {
