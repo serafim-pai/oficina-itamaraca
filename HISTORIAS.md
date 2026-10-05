@@ -116,3 +116,31 @@ Critérios de aceitação:
   data de entrega.
 - As condições que cancelam a garantia aparecem no comprovante
   entregue ao cliente.
+
+Como ficou implementado (complemento escrito pelo Claude; o dono deve
+revisar):
+- O tempo de garantia é informado **por serviço**, em dias ou em meses
+  (0 quer dizer "sem garantia" e conta como informado). Só o dono informa,
+  e dá para corrigir até a entrega ser fechada. Limite de 10 anos.
+- "Fechar a entrega" é feito só pelo dono, uma única vez por veículo, e
+  só quando: o cliente aprovou o orçamento (aprovação valendo); todos os
+  serviços têm o tempo de garantia informado; e as condições que cancelam
+  a garantia foram escritas (o sistema sugere um texto, que o dono edita;
+  se todos os serviços forem "sem garantia", as condições são opcionais).
+- A data de entrega é o dia em que a entrega é fechada (horário de
+  Brasília). A garantia de cada serviço vale **até** a data de entrega
+  mais o tempo informado (meses contam em calendário: 31/01 + 1 mês =
+  28/02, ou 29/02 em ano bissexto).
+- Ao fechar, o sistema guarda uma cópia do que foi combinado (serviços,
+  o que foi feito, valores e garantias). O comprovante sai dessa cópia e
+  por isso nunca muda.
+- Depois da entrega o cadastro do veículo fica travado: não aceita novo
+  serviço, mudança de valor, de "como resolver", de garantia, de
+  aprovação nem de prazo.
+- O comprovante (para imprimir) mostra os dados do veículo, a data de
+  entrega, os serviços com valor e garantia, a data de fim de cada
+  garantia, o total, as condições que cancelam a garantia, a aprovação do
+  cliente e linhas de assinatura. Dono e funcionário podem ver e imprimir.
+- A tela do veículo mostra se cada garantia está vigente ou vencida, e a
+  lista de veículos mostra "Entregue em dd/mm/aaaa".
+- Ainda não existe "desfazer a entrega".

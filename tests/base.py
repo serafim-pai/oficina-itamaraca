@@ -25,7 +25,8 @@ class BaseTest(unittest.TestCase):
     def setUp(self):
         oficina.app.config["TESTING"] = True
         oficina.app.config["WTF_CSRF_ENABLED"] = self.csrf
-        for tabela in ("veiculos", "usuarios", "tentativas_login", "fotos", "servicos", "aprovacoes", "prazos"):
+        for tabela in ("veiculos", "usuarios", "tentativas_login", "fotos", "servicos", "aprovacoes", "prazos",
+                       "entregas", "entrega_itens"):
             self.sql(f"DELETE FROM {tabela}")
         for arquivo in os.listdir(oficina.PASTA_FOTOS):
             os.remove(os.path.join(oficina.PASTA_FOTOS, arquivo))

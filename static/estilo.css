@@ -136,6 +136,53 @@ td.valor button { margin-top: 0; padding: 4px 10px; }
 .selo-atrasado { background: #f8d7da; color: #721c24; }
 .bloqueado { color: #8a1c1c; font-weight: bold; }
 
+/* Entrega e garantia (história 8) */
+.selo-entregue { background: #cfe2ff; color: #0a3d91; }
+.selo-vigente { background: #d4edda; color: #155724; }
+.selo-vencida { background: #f8d7da; color: #721c24; }
+.selo-sem-garantia { background: #e5e5e5; color: #555; }
+.entrega { margin-top: 20px; }
+.entrega .detalhe { background: #f4f6fa; border-radius: 4px; padding: 8px 10px; }
+.entrega textarea { font-family: inherit; }
+button[disabled] { background: #9aa5b5; cursor: not-allowed; }
+td.garantia { min-width: 150px; }
+td.garantia form { gap: 4px; }
+td.garantia .linha-garantia { display: flex; gap: 4px; }
+td.garantia input { width: 60px; }
+td.garantia select { width: auto; padding: 5px; }
+td.garantia button { margin-top: 0; padding: 4px 10px; }
+a.botao { display: inline-block; background: #1a3c6e; color: white; padding: 10px 16px; border-radius: 4px;
+          text-decoration: none; font-weight: bold; }
+a.botao:hover { background: #14305a; }
+
+/* Comprovante para imprimir */
+body.comprovante-pagina { max-width: 820px; }
+.comprovante { border: 2px solid #1a3c6e; border-radius: 6px; padding: 20px 26px; }
+.comprovante h1 { margin: 0; }
+.comprovante .titulo-comprovante { text-align: center; border: 0; margin: 4px 0 18px; color: #333; }
+.comprovante h3 { margin: 22px 0 6px; color: #1a3c6e; }
+.comprovante table { margin-top: 6px; }
+.comprovante table.dados th { background: #eef2f8; color: #1a3c6e; width: 16%; }
+.comprovante table.servicos th { background: #1a3c6e; color: white; }
+.comprovante td.num { text-align: right; white-space: nowrap; }
+.comprovante tr.total td { font-weight: bold; background: #eef2f8; }
+.comprovante .condicoes { white-space: pre-line; border: 1px solid #1a3c6e; border-radius: 4px; padding: 10px 12px;
+                          background: #fafbfd; }
+.comprovante .pequeno { color: #555; font-size: 12px; margin: 8px 0 0; }
+.comprovante .assinaturas { display: flex; gap: 40px; margin-top: 48px; }
+.comprovante .assinaturas div { flex: 1; text-align: center; font-size: 13px; }
+.comprovante .assinaturas .linha { display: block; border-top: 1px solid #000; margin-bottom: 4px; }
+
+@media print {
+    .nao-imprimir { display: none !important; }
+    body, body.comprovante-pagina { margin: 0; max-width: none; padding: 0; color: #000; }
+    .comprovante { border: 1px solid #000; }
+    .comprovante table.servicos th, .comprovante table.dados th, .comprovante tr.total td {
+        background: #fff !important; color: #000 !important; }
+    .comprovante th, .comprovante td { border-color: #000; }
+    .comprovante h3, .comprovante table.dados th { color: #000; }
+}
+
 @media (max-width: 600px) {
     body { margin: 15px auto; }
     table { display: block; overflow-x: auto; }

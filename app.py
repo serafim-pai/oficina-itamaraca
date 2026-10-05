@@ -37,6 +37,21 @@ MAX_MOTIVO_PRAZO = 300                                         # letras do motiv
 # Horário de Brasília (o Brasil não tem mais horário de verão). O servidor trabalha em UTC,
 # 3 horas à frente, e por isso o "hoje" do prazo é calculado com este fuso.
 FUSO_BRASIL = timezone(timedelta(hours=-3))
+UNIDADES_GARANTIA = ("DIAS", "MESES")                          # história 8
+MAX_GARANTIA = {"DIAS": 3650, "MESES": 120}                    # limite de sanidade: 10 anos
+MAX_CONDICOES = 1500                                           # letras das condições que cancelam a garantia
+# Texto sugerido no fechamento da entrega (o dono pode editar antes de fechar).
+CONDICOES_PADRAO = (
+    "A garantia deixa de valer se:\n"
+    "1) o veículo for aberto, consertado ou modificado por outra oficina ou pessoa;\n"
+    "2) houver acidente, batida, enchente, mau uso ou falta de manutenção;\n"
+    "3) forem usadas peças ou produtos que a oficina não indicou;\n"
+    "4) o cliente não apresentar este comprovante.\n"
+    "A garantia cobre somente os serviços listados neste comprovante, dentro do prazo indicado."
+)
+# Depois que o veículo é entregue, estas ações (envios de formulário) ficam bloqueadas.
+TRAVADOS_APOS_ENTREGA = {"registrar_servico", "registrar_resolucao", "registrar_valor", "excluir_servico",
+                         "registrar_aprovacao", "registrar_prazo", "registrar_garantia", "fechar_entrega"}
 MAX_FOTOS = 10                       # fotos por cadastro
 MAX_BYTES_FOTO = 8 * 1024 * 1024     # tamanho máximo de cada foto enviada
 MAX_PIXELS_FOTO = 40_000_000         # evita imagens "bomba" que travariam o servidor
@@ -165,6 +180,38 @@ def init_db():
         )
         """
     )
+    # História 8: o fechamento da entrega (um por veículo) guarda uma "foto" do que foi combinado:
+    # os serviços, valores e garantias na hora da entrega. O comprovante sai daqui, e por isso
+    # nunca muda, mesmo que o cadastro seja mexido depois.
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS entregas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            veiculo_id INTEGER NOT NULL UNIQUE,
+            data_entrega TEXT NOT NULL,
+            condicoes TEXT,
+            total_centavos INTEGER NOT NULL,
+            entregue_por TEXT,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS entrega_itens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entrega_id INTEGER NOT NULL,
+            servico_id INTEGER,
+            tipo TEXT NOT NULL,
+            problema TEXT NOT NULL,
+            como_resolver TEXT,
+            valor_centavos INTEGER NOT NULL,
+            garantia_valor INTEGER NOT NULL,
+            garantia_unidade TEXT NOT NULL,
+            garantia_ate TEXT
+        )
+        """
+    )
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS usuarios (
@@ -196,6 +243,11 @@ def init_db():
     # Banco criado antes da história 5 ainda não tem a coluna do valor (em centavos)
     if "valor_centavos" not in colunas:
         db.execute("ALTER TABLE servicos ADD COLUMN valor_centavos INTEGER")
+    # Banco criado antes da história 8 ainda não tem o tempo de garantia de cada serviço
+    if "garantia_valor" not in colunas:
+        db.execute("ALTER TABLE servicos ADD COLUMN garantia_valor INTEGER")
+    if "garantia_unidade" not in colunas:
+        db.execute("ALTER TABLE servicos ADD COLUMN garantia_unidade TEXT")
     db.commit()
     db.close()
     os.makedirs(PASTA_FOTOS, exist_ok=True)
@@ -234,6 +286,18 @@ def exigir_login():
         session.pop("usuario_id", None)
         return redirect(url_for("login"))
     g.usuario = usuario
+    return None
+
+
+@app.before_request
+def travar_veiculo_entregue():
+    """História 8: depois que o veículo é entregue, o cadastro dele não muda mais
+    (serviços, valores, aprovação, prazo e garantia). O comprovante depende disso."""
+    if request.method != "POST" or request.endpoint not in TRAVADOS_APOS_ENTREGA or g.get("usuario") is None:
+        return None
+    veiculo_id = (request.view_args or {}).get("id")
+    if veiculo_id and get_db().execute("SELECT 1 FROM entregas WHERE veiculo_id = ?", (veiculo_id,)).fetchone():
+        return pagina_veiculo(veiculo_id, ["Este veículo já foi entregue: o cadastro dele não pode mais ser alterado."]), 409
     return None
 
 
@@ -463,12 +527,64 @@ def situacao_prazo(data_prevista, hoje):
 
 
 def prazos_dos_veiculos(db, veiculos):
-    """Situação do prazo de cada veículo da lista, com uma consulta só."""
+    """Situação da entrega de cada veículo da lista (prazo ou 'entregue'), com poucas consultas."""
     ultimos = {}
     for p in db.execute("SELECT veiculo_id, data_prevista FROM prazos ORDER BY id"):
         ultimos[p["veiculo_id"]] = p["data_prevista"]       # a última linha de cada veículo é a que vale
+    entregues = {e["veiculo_id"]: e["data_entrega"] for e in db.execute("SELECT veiculo_id, data_entrega FROM entregas")}
     hoje = hoje_brasil()
-    return {v["id"]: situacao_prazo(ultimos.get(v["id"]), hoje) for v in veiculos}
+    resultado = {}
+    for v in veiculos:
+        if v["id"] in entregues:
+            resultado[v["id"]] = ("ENTREGUE", f"Entregue em {formatar_data(entregues[v['id']])}")
+        else:
+            resultado[v["id"]] = situacao_prazo(ultimos.get(v["id"]), hoje)
+    return resultado
+
+
+# ---------- GARANTIA E ENTREGA (história 8) ----------
+
+def somar_meses(data, meses):
+    """Soma meses de calendário a uma data. Se o dia não existir no mês de destino, usa o último dia
+    do mês (ex.: 31/01 + 1 mês = 28/02 ou 29/02)."""
+    mes_total = data.month - 1 + meses
+    ano, mes = data.year + mes_total // 12, mes_total % 12 + 1
+    for dia in (data.day, 30, 29, 28):
+        try:
+            return date(ano, mes, dia)
+        except ValueError:
+            continue
+    raise ValueError("data inválida")   # nunca acontece: o dia 28 existe em todo mês
+
+
+def fim_da_garantia(data_entrega, valor, unidade):
+    """Data em que a garantia termina, contada a partir da data de entrega.
+    Devolve None quando o serviço não tem garantia (tempo 0). A garantia vale ATÉ essa data."""
+    if not valor:
+        return None
+    if unidade == "MESES":
+        return somar_meses(data_entrega, valor)
+    return data_entrega + timedelta(days=valor)
+
+
+def texto_garantia(valor, unidade):
+    """'Sem garantia', '1 mês', '12 meses', '1 dia' ou '90 dias'."""
+    if valor is None:
+        return "-"
+    if valor == 0:
+        return "Sem garantia"
+    if unidade == "MESES":
+        return f"{valor} {'mês' if valor == 1 else 'meses'}"
+    return f"{valor} {'dia' if valor == 1 else 'dias'}"
+
+
+def situacao_garantia(garantia_ate, hoje):
+    """Situação da garantia de um serviço entregue. Devolve (chave, texto)."""
+    if not garantia_ate:
+        return "SEM_GARANTIA", "Sem garantia"
+    if datetime.strptime(garantia_ate, "%Y-%m-%d").date() < hoje:
+        return "VENCIDA", f"Venceu em {formatar_data(garantia_ate)}"
+    return "VIGENTE", f"Vigente até {formatar_data(garantia_ate)}"
 
 
 def pagina_inicial(erros=None, dados=None):
@@ -666,7 +782,18 @@ def pagina_veiculo(id, erros=None, dados=None):
     prazos = db.execute("SELECT * FROM prazos WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
     hoje = hoje_brasil()
     prazo_chave, prazo_texto = situacao_prazo(prazos[0]["data_prevista"] if prazos else None, hoje)
+    # História 8: entrega fechada (com o que foi combinado) e garantias ainda não informadas
+    entrega = db.execute("SELECT * FROM entregas WHERE veiculo_id = ?", (id,)).fetchone()
+    itens = []
+    if entrega:
+        prazo_chave, prazo_texto = "ENTREGUE", f"Entregue em {formatar_data(entrega['data_entrega'])}"
+        itens = [dict(i, situacao=situacao_garantia(i["garantia_ate"], hoje))
+                 for i in db.execute("SELECT * FROM entrega_itens WHERE entrega_id = ? ORDER BY id", (entrega["id"],))]
+    sem_garantia_informada = sum(1 for s in servicos if s["garantia_valor"] is None)
     return render_template("veiculo.html", veiculo=veiculo, servicos=servicos, fotos=fotos,
+                           entrega=entrega, itens=itens, sem_garantia_informada=sem_garantia_informada,
+                           unidades_garantia=UNIDADES_GARANTIA, texto_garantia=texto_garantia,
+                           condicoes_padrao=CONDICOES_PADRAO, max_condicoes=MAX_CONDICOES,
                            prazos=prazos, prazo_chave=prazo_chave, prazo_texto=prazo_texto,
                            aprovado_vigente=(situacao == "APROVADO"), hoje_iso=hoje.isoformat(),
                            maximo_iso=(hoje + timedelta(days=MAX_DIAS_PRAZO)).isoformat(),
@@ -866,6 +993,105 @@ def registrar_prazo(id):
                (id, data.isoformat(), motivo or None, g.usuario["nome"]))
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/garantia", methods=["POST"])
+def registrar_garantia(id, servico_id):
+    """História 8: o dono informa o tempo de garantia de um serviço, em dias ou meses
+    (0 quer dizer 'sem garantia'). Dá para corrigir até a entrega ser fechada."""
+    so_dono()
+    db = get_db()
+    buscar_veiculo(db, id)
+    if not db.execute("SELECT 1 FROM servicos WHERE id = ? AND veiculo_id = ?", (servico_id, id)).fetchone():
+        abort(404)
+    unidade = request.form.get("unidade", "").strip().upper()
+    texto = request.form.get("valor", "").strip()
+
+    erro = None
+    if unidade not in UNIDADES_GARANTIA:
+        erro = "Escolha se o tempo de garantia é em dias ou em meses."
+    elif not re.fullmatch(r"\d{1,4}", texto):
+        erro = "Informe o tempo de garantia com um número inteiro (use 0 para 'sem garantia')."
+    elif int(texto) > MAX_GARANTIA[unidade]:
+        erro = f"A garantia pode ter no máximo {MAX_GARANTIA[unidade]} {unidade.lower()}."
+    if erro:
+        return pagina_veiculo(id, [erro])
+
+    db.execute("UPDATE servicos SET garantia_valor = ?, garantia_unidade = ? WHERE id = ?",
+               (int(texto), unidade, servico_id))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+def limpar_condicoes(texto):
+    """Mantém as quebras de linha, mas tira espaços repetidos e linhas vazias."""
+    linhas = (" ".join(linha.split()) for linha in texto.replace("\r", "").split("\n"))
+    return "\n".join(linha for linha in linhas if linha)
+
+
+@app.route("/veiculos/<int:id>/entrega", methods=["POST"])
+def fechar_entrega(id):
+    """História 8: o dono fecha a entrega do veículo. Só com o orçamento aprovado, o tempo de garantia
+    informado em TODOS os serviços e as condições que cancelam a garantia. A data de entrega é hoje.
+    Fica guardada uma cópia do que foi combinado (o comprovante sai dela) e o cadastro é travado."""
+    so_dono()
+    db = get_db()
+    buscar_veiculo(db, id)
+    servicos = db.execute("SELECT * FROM servicos WHERE veiculo_id = ? ORDER BY id", (id,)).fetchall()
+    ultima_aprovacao = db.execute("SELECT * FROM aprovacoes WHERE veiculo_id = ? ORDER BY id DESC LIMIT 1",
+                                  (id,)).fetchone()
+    condicoes = limpar_condicoes(request.form.get("condicoes", ""))
+    hoje = hoje_brasil()
+
+    erros = []
+    if situacao_aprovacao(servicos, ultima_aprovacao)[0] != "APROVADO":
+        erros.append("A entrega só pode ser fechada depois que o cliente aprovar o orçamento.")
+    elif request.form.get("assinatura", "") != assinatura_orcamento(servicos):
+        erros.append("O orçamento mudou enquanto você fechava a entrega. Confira os valores e tente de novo.")
+    faltam = sum(1 for s in servicos if s["garantia_valor"] is None)
+    if faltam:
+        erros.append("Informe o tempo de garantia de todos os serviços antes de fechar a entrega "
+                     f"(falta{'m' if faltam != 1 else ''} {faltam}).")
+    if any(s["garantia_valor"] for s in servicos) and sum(1 for letra in condicoes if letra.isalpha()) < 20:
+        erros.append("Escreva as condições que cancelam a garantia (aparecem no comprovante do cliente).")
+    if len(condicoes) > MAX_CONDICOES:
+        erros.append(f"As condições podem ter no máximo {MAX_CONDICOES} letras.")
+    if erros:
+        return pagina_veiculo(id, erros, {"condicoes": condicoes})
+
+    total = sum(s["valor_centavos"] for s in servicos)
+    try:
+        cursor = db.execute("INSERT INTO entregas (veiculo_id, data_entrega, condicoes, total_centavos, entregue_por) "
+                            "VALUES (?, ?, ?, ?, ?)",
+                            (id, hoje.isoformat(), condicoes or None, total, g.usuario["nome"]))
+        for s in servicos:
+            ate = fim_da_garantia(hoje, s["garantia_valor"], s["garantia_unidade"])
+            db.execute("INSERT INTO entrega_itens (entrega_id, servico_id, tipo, problema, como_resolver, "
+                       "valor_centavos, garantia_valor, garantia_unidade, garantia_ate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                       (cursor.lastrowid, s["id"], s["tipo"], s["problema"], s["como_resolver"], s["valor_centavos"],
+                        s["garantia_valor"], s["garantia_unidade"], ate.isoformat() if ate else None))
+        db.commit()
+    except sqlite3.IntegrityError:      # dois cliques ao mesmo tempo: só um fecha a entrega
+        db.rollback()
+        return pagina_veiculo(id, ["Este veículo já foi entregue."]), 409
+    return redirect(url_for("comprovante", id=id))
+
+
+@app.route("/veiculos/<int:id>/comprovante")
+def comprovante(id):
+    """Comprovante de entrega e garantia, para imprimir e entregar ao cliente."""
+    db = get_db()
+    veiculo = buscar_veiculo(db, id)
+    entrega = db.execute("SELECT * FROM entregas WHERE veiculo_id = ?", (id,)).fetchone()
+    if not entrega:
+        abort(404)
+    hoje = hoje_brasil()
+    itens = [dict(i, situacao=situacao_garantia(i["garantia_ate"], hoje))
+             for i in db.execute("SELECT * FROM entrega_itens WHERE entrega_id = ? ORDER BY id", (entrega["id"],))]
+    aprovacao = db.execute("SELECT * FROM aprovacoes WHERE veiculo_id = ? ORDER BY id DESC LIMIT 1", (id,)).fetchone()
+    return render_template("comprovante.html", veiculo=veiculo, entrega=entrega, itens=itens, aprovacao=aprovacao,
+                           formatar_data=formatar_data, formatar_dinheiro=formatar_dinheiro,
+                           texto_garantia=texto_garantia, nomes_formas=NOMES_FORMAS_APROVACAO)
 
 
 @app.route("/veiculos/<int:id>/servicos/<int:servico_id>/excluir", methods=["POST"])

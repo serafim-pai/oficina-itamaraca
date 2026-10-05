@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comprovante de entrega - {{ veiculo['placa'] }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body class="comprovante-pagina">
+    <div class="nao-imprimir">
+        {% include '_menu.html' %}
+        <p>
+            <a href="{{ url_for('ver_veiculo', id=veiculo['id']) }}">&larr; Voltar ao veículo</a>
+            &nbsp;
+            <button type="button" onclick="window.print()">🖨️ Imprimir</button>
+        </p>
+    </div>
+
+    <div class="comprovante">
+        <h1>OFICINA ITAMARACÁ</h1>
+        <h2 class="titulo-comprovante">Comprovante de entrega e garantia</h2>
+
+        <table class="dados">
+            <tr><th>Placa</th><td>{{ veiculo['placa'] }}</td><th>Data da entrega</th><td>{{ formatar_data(entrega['data_entrega']) }}</td></tr>
+            <tr><th>Veículo</th><td>{{ veiculo['marca'] or '-' }} {{ veiculo['modelo'] }} {{ veiculo['cor'] }} {{ veiculo['ano'] }}</td>
+                <th>Quilometragem</th><td>{{ veiculo['quilometragem'] or '-' }}</td></tr>
+            <tr><th>Responsável</th><td colspan="3">{{ veiculo['responsavel'] or '-' }}</td></tr>
+        </table>
+
+        <h3>Serviços realizados e garantia</h3>
+        <table class="servicos">
+            <tr><th>Serviço</th><th>O que foi feito</th><th>Valor</th><th>Garantia</th><th>Garantia válida até</th></tr>
+            {% for i in itens %}
+            <tr>
+                <td><strong>{{ i['tipo'] }}</strong><br>{{ i['problema'] }}</td>
+                <td>{{ i['como_resolver'] or '-' }}</td>
+                <td class="num">{{ formatar_dinheiro(i['valor_centavos']) }}</td>
+                <td>{{ texto_garantia(i['garantia_valor'], i['garantia_unidade']) }}</td>
+                <td>{{ formatar_data(i['garantia_ate']) if i['garantia_ate'] else '-' }}</td>
+            </tr>
+            {% endfor %}
+            <tr class="total"><td colspan="2">Valor total</td><td class="num">{{ formatar_dinheiro(entrega['total_centavos']) }}</td><td colspan="2"></td></tr>
+        </table>
+
+        {% if entrega['condicoes'] %}
+        <h3>Condições que cancelam a garantia</h3>
+        <div class="condicoes">{{ entrega['condicoes'] }}</div>
+        {% else %}
+        <p class="condicoes">Nenhum dos serviços acima tem garantia.</p>
+        {% endif %}
+
+        {% if aprovacao %}
+        <p class="pequeno">Orçamento {{ 'aprovado' if aprovacao['decisao'] == 'APROVADO' else 'recusado' }} pelo cliente
+            ({{ nomes_formas.get(aprovacao['forma'], aprovacao['forma']) }}) em {{ aprovacao['criado_em'] }},
+            no valor de {{ formatar_dinheiro(aprovacao['total_centavos']) }}.</p>
+        {% endif %}
+        <p class="pequeno">Entrega registrada por {{ entrega['entregue_por'] }} em {{ entrega['criado_em'] }} (horário do servidor).</p>
+
+        <div class="assinaturas">
+            <div><span class="linha"></span>Cliente</div>
+            <div><span class="linha"></span>Oficina Itamaracá</div>
+        </div>
+    </div>
+</body>
+</html>

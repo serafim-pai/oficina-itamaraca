@@ -38,6 +38,7 @@
     </div>
     {% endif %}
 
+    {% if not entrega %}
     <h2>Registrar problema e tipo de serviço</h2>
     <form method="POST" action="{{ url_for('registrar_servico', id=veiculo['id']) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -54,6 +55,7 @@
 
         <button type="submit">Registrar</button>
     </form>
+    {% endif %}
 
     <h2>Problemas registrados</h2>
     {% if servicos %}
@@ -64,25 +66,30 @@
             <th>Problema</th>
             <th>Como resolver</th>
             <th>Valor</th>
+            <th>Garantia</th>
             <th>Registrado por</th>
             <th>Data</th>
-            {% if usuario and usuario['tipo'] == 'DONO' %}<th></th>{% endif %}
+            {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}<th></th>{% endif %}
         </tr>
         {% for s in servicos %}
         <tr>
             <td>{{ s['tipo'] }}</td>
             <td>{{ s['problema'] }}</td>
             <td class="resolucao">
+                {% if entrega %}
+                {{ s['como_resolver'] or '-' }}
+                {% else %}
                 <form method="POST" action="{{ url_for('registrar_resolucao', id=veiculo['id'], servico_id=s['id']) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <textarea name="como_resolver" rows="3" maxlength="{{ max_problema }}"
                               aria-label="Como resolver">{{ s['como_resolver'] or '' }}</textarea>
                     <button type="submit">{{ 'Atualizar' if s['como_resolver'] else 'Salvar' }}</button>
                 </form>
+                {% endif %}
                 {% if s['como_resolver'] %}<span class="aviso">Por {{ s['resolvido_por'] }}</span>{% endif %}
             </td>
             <td class="valor">
-                {% if usuario and usuario['tipo'] == 'DONO' %}
+                {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
                 <form method="POST" action="{{ url_for('registrar_valor', id=veiculo['id'], servico_id=s['id']) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="text" name="valor" inputmode="decimal" placeholder="0,00" aria-label="Valor do serviço"
@@ -93,9 +100,28 @@
                 {{ formatar_dinheiro(s['valor_centavos']) if s['valor_centavos'] is not none else '-' }}
                 {% endif %}
             </td>
+            <td class="garantia">
+                {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
+                <form method="POST" action="{{ url_for('registrar_garantia', id=veiculo['id'], servico_id=s['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="linha-garantia">
+                        <input type="text" name="valor" inputmode="numeric" maxlength="4" placeholder="0" aria-label="Tempo de garantia"
+                               value="{{ s['garantia_valor'] if s['garantia_valor'] is not none else '' }}">
+                        <select name="unidade" aria-label="Unidade da garantia">
+                            {% for u in unidades_garantia %}
+                            <option value="{{ u }}" {{ 'selected' if s['garantia_unidade'] == u }}>{{ u|lower }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit">{{ 'Atualizar' if s['garantia_valor'] is not none else 'Salvar' }}</button>
+                </form>
+                {% else %}
+                {{ texto_garantia(s['garantia_valor'], s['garantia_unidade']) }}
+                {% endif %}
+            </td>
             <td>{{ s['registrado_por'] }}</td>
             <td>{{ s['criado_em'] }}</td>
-            {% if usuario and usuario['tipo'] == 'DONO' %}
+            {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
             <td class="acoes">
                 <form method="POST" action="{{ url_for('excluir_servico', id=veiculo['id'], servico_id=s['id']) }}"
                       onsubmit="return confirm('Excluir este problema?')">
@@ -140,7 +166,7 @@
         {% endif %}
         {% endif %}
 
-        {% if orcamento_completo %}
+        {% if orcamento_completo and not entrega %}
         <form method="POST" action="{{ url_for('registrar_aprovacao', id=veiculo['id']) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="assinatura" value="{{ assinatura }}">
@@ -167,7 +193,7 @@
 
             <button type="submit">Registrar decisão do cliente</button>
         </form>
-        {% else %}
+        {% elif not entrega %}
         <p class="aviso">Para registrar a decisão do cliente, todos os serviços precisam ter valor (veja o orçamento acima).</p>
         {% endif %}
 
@@ -210,7 +236,7 @@
         {% endif %}
         {% endif %}
 
-        {% if usuario and usuario['tipo'] == 'DONO' %}
+        {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
         {% if aprovado_vigente %}
         <form method="POST" action="{{ url_for('registrar_prazo', id=veiculo['id']) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -225,7 +251,7 @@
         {% else %}
         <p class="aviso">O prazo só pode ser definido depois que o cliente aprovar o orçamento.</p>
         {% endif %}
-        {% elif not prazos %}
+        {% elif not prazos and not entrega %}
         <p class="aviso">O prazo de entrega é definido pelo dono da oficina, depois da aprovação do cliente.</p>
         {% endif %}
 
@@ -246,6 +272,51 @@
             </table>
             </div>
         </details>
+        {% endif %}
+    </div>
+
+    <div class="entrega">
+        <h2>Entrega e garantia</h2>
+        {% if entrega %}
+        <p><span class="selo selo-entregue">Entregue em {{ formatar_data(entrega['data_entrega']) }}</span></p>
+        <p class="detalhe">
+            Entrega fechada por {{ entrega['entregue_por'] }} em {{ entrega['criado_em'] }}<br>
+            Valor total: {{ formatar_dinheiro(entrega['total_centavos']) }}
+        </p>
+        <div class="tabela-rolavel">
+        <table>
+            <tr><th>Serviço</th><th>Garantia</th><th>Situação</th></tr>
+            {% for i in itens %}
+            <tr>
+                <td>{{ i['tipo'] }}: {{ i['problema'] }}</td>
+                <td>{{ texto_garantia(i['garantia_valor'], i['garantia_unidade']) }}</td>
+                <td><span class="selo selo-{{ i['situacao'][0]|lower|replace('_', '-') }}">{{ i['situacao'][1] }}</span></td>
+            </tr>
+            {% endfor %}
+        </table>
+        </div>
+        <p><a class="botao" href="{{ url_for('comprovante', id=veiculo['id']) }}">🖨️ Ver e imprimir o comprovante</a></p>
+        {% elif usuario and usuario['tipo'] == 'DONO' %}
+        {% if aprovado_vigente %}
+        {% if sem_garantia_informada %}
+        <div class="aviso-custo">Falta informar o tempo de garantia de <strong>{{ sem_garantia_informada }}</strong>
+            serviço{{ 's' if sem_garantia_informada != 1 else '' }} (coluna <strong>Garantia</strong> da tabela acima;
+            use 0 para "sem garantia"). Só depois dá para fechar a entrega.</div>
+        {% endif %}
+        <form method="POST" action="{{ url_for('fechar_entrega', id=veiculo['id']) }}"
+              onsubmit="return confirm('Fechar a entrega de hoje? Depois disso o cadastro deste veículo não poderá mais ser alterado.')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="assinatura" value="{{ assinatura }}">
+            <label for="condicoes">Condições que cancelam a garantia *</label>
+            <textarea id="condicoes" name="condicoes" rows="9" maxlength="{{ max_condicoes }}">{{ dados.get('condicoes', condicoes_padrao) }}</textarea>
+            <span class="aviso">Este texto aparece no comprovante entregue ao cliente. O texto acima é uma sugestão: edite como quiser.</span>
+            <button type="submit" {{ 'disabled' if sem_garantia_informada }}>Fechar a entrega de hoje</button>
+        </form>
+        {% else %}
+        <p class="aviso">A entrega só pode ser fechada depois que o cliente aprovar o orçamento.</p>
+        {% endif %}
+        {% else %}
+        <p class="aviso">A entrega é fechada pelo dono da oficina.</p>
         {% endif %}
     </div>
     {% else %}

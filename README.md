@@ -17,6 +17,9 @@ Sistema de oficina mecânica (projeto de prática). Histórias de usuário em [H
   - Se o orçamento **mudar depois** (um valor mudar, ou um serviço entrar ou sair), a decisão **deixa de valer** e o sistema pede uma nova. Se mudar enquanto alguém registra, o sistema recusa e pede para conferir.
   - A lista de veículos mostra a situação de cada orçamento: sem orçamento, incompleto, aguardando o cliente, aprovado, recusado ou "mudou: precisa de nova decisão".
 - **Prazo de entrega** (história 7): depois que o cliente aprova o orçamento, **só o dono** define a data de entrega prometida (de hoje até 1 ano à frente). Mudar um prazo exige o **motivo**, e todos os prazos ficam no histórico (quem definiu, quando, qual data e por quê). A tela do veículo e a lista mostram a situação: sem prazo, faltam N dias, entrega amanhã, entrega hoje ou **atrasado há N dias**. O "hoje" usa o horário de Brasília, e não o do servidor.
+- **Garantia e entrega** (história 8): o dono informa o **tempo de garantia de cada serviço** (em dias ou meses; 0 = sem garantia). Para **fechar a entrega** é preciso: orçamento aprovado, garantia informada em todos os serviços e as **condições que cancelam a garantia** (o sistema sugere um texto, que você edita). O sistema calcula **até quando vale cada garantia** a partir da data da entrega e gera o **comprovante para imprimir**, com serviços, valores, garantias, condições e linhas de assinatura.
+  - O comprovante sai de uma cópia guardada na hora da entrega e **nunca muda**. Depois da entrega, o cadastro do veículo fica **travado**.
+  - A tela do veículo mostra se cada garantia está vigente ou vencida, e a lista mostra "Entregue em dd/mm/aaaa".
 
 ## Login e usuários
 - **Ninguém usa o sistema sem entrar** com e-mail e senha. As senhas são guardadas protegidas (nunca "abertas"), com no mínimo 8 caracteres.
