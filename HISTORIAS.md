@@ -80,6 +80,30 @@ o dono deve revisar):
   orçamento, incompleto, aguardando o cliente, aprovado, recusado ou
   "mudou: precisa de nova decisão".
 
+## História 7 - Definir o prazo de entrega
+Como dono da oficina, quero definir o prazo de entrega do veículo, para o
+cliente saber quando vai receber o carro e para a oficina acompanhar os
+atrasos.
+
+Critérios de aceitação (escritos pelo Claude a partir do título do mapa;
+o dono deve revisar):
+- Só o dono define ou muda o prazo. O funcionário apenas vê.
+- O prazo só pode ser definido depois que o cliente aprovou o orçamento
+  (aprovação valendo, ver história 6).
+- O prazo é uma data: não pode ser anterior a hoje (data de Brasília) nem
+  passar de 1 ano à frente.
+- Mudar um prazo já definido exige explicar o motivo; a nova data precisa
+  ser diferente da atual.
+- Cada prazo fica no histórico (quem definiu, quando, qual data e o
+  motivo); o último é o que vale.
+- O sistema mostra a situação do prazo, na tela do veículo e na lista:
+  sem prazo, "faltam N dias", "entrega amanhã", "entrega hoje" ou
+  "atrasado há N dias".
+- Se a aprovação do cliente deixar de valer depois (o orçamento mudou), o
+  prazo continua guardado, mas aparece o aviso para confirmá-lo com o
+  cliente, e ele só pode ser mudado depois de uma nova aprovação.
+- A entrega em si (marcar o carro como entregue) fica para a história 8.
+
 ## História 8 - Registrar a garantia
 Como dono da oficina, quero registrar o tempo de garantia de cada
 serviço e as condições que cancelam a garantia, para o cliente sair

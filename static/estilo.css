@@ -116,9 +116,11 @@ td.valor button { margin-top: 0; padding: 4px 10px; }
 
 /* Aprovação do cliente (história 6) */
 .aprovacao { margin-top: 20px; }
-.aprovacao .detalhe { background: #f4f6fa; border-radius: 4px; padding: 8px 10px; }
-.aprovacao details { margin-top: 12px; }
-.aprovacao summary { cursor: pointer; font-weight: bold; }
+.aprovacao .detalhe, .prazo .detalhe { background: #f4f6fa; border-radius: 4px; padding: 8px 10px; }
+.aprovacao details, .prazo details { margin-top: 12px; }
+.aprovacao summary, .prazo summary { cursor: pointer; font-weight: bold; }
+.prazo { margin-top: 20px; }
+.prazo input[type="date"] { padding: 6px; max-width: 220px; }
 .aviso-custo { background: #fff3cd; border: 1px solid #ffc107; color: #5c4400; border-radius: 4px;
                padding: 8px 10px; margin: 10px 0; }
 .selo { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 13px; font-weight: bold;
@@ -127,7 +129,11 @@ td.valor button { margin-top: 0; padding: 4px 10px; }
 .selo-recusado { background: #f8d7da; color: #721c24; }
 .selo-aguardando { background: #fff3cd; color: #856404; }
 .selo-desatualizada { background: #ffe0b2; color: #8a3200; }
-.selo-incompleto, .selo-sem-orcamento { background: #e5e5e5; color: #555; }
+.selo-incompleto, .selo-sem-orcamento, .selo-sem-prazo { background: #e5e5e5; color: #555; }
+.selo-no-prazo { background: #d4edda; color: #155724; }
+.selo-proximo { background: #fff3cd; color: #856404; }
+.selo-hoje { background: #ffe0b2; color: #8a3200; }
+.selo-atrasado { background: #f8d7da; color: #721c24; }
 .bloqueado { color: #8a1c1c; font-weight: bold; }
 
 @media (max-width: 600px) {

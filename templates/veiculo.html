@@ -10,7 +10,8 @@
     {% include '_menu.html' %}
     <h1>{{ veiculo['placa'] }}</h1>
     <p><a href="{{ url_for('index') }}">&larr; Voltar aos veículos</a></p>
-    <p>Orçamento: <span class="selo selo-{{ situacao|lower|replace('_', '-') }}">{{ situacao_texto }}</span></p>
+    <p>Orçamento: <span class="selo selo-{{ situacao|lower|replace('_', '-') }}">{{ situacao_texto }}</span>
+       &nbsp; Entrega: <span class="selo selo-{{ prazo_chave|lower|replace('_', '-') }}">{{ prazo_texto }}</span></p>
 
     <p>
         <strong>Responsável:</strong> {{ veiculo['responsavel'] or '-' }}<br>
@@ -184,6 +185,62 @@
                     <td>{{ nomes_formas.get(a['forma'], a['forma']) }}</td>
                     <td>{{ a['registrado_por'] }}</td>
                     <td>{{ a['observacao'] or '-' }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            </div>
+        </details>
+        {% endif %}
+    </div>
+
+    <div class="prazo">
+        <h2>Prazo de entrega</h2>
+        <p><span class="selo selo-{{ prazo_chave|lower|replace('_', '-') }}">{{ prazo_texto }}</span></p>
+
+        {% if prazos %}
+        {% set pz = prazos[0] %}
+        <p class="detalhe">
+            Prazo prometido ao cliente: <strong>{{ formatar_data(pz['data_prevista']) }}</strong><br>
+            Definido por {{ pz['registrado_por'] }} em {{ pz['criado_em'] }}
+            {% if pz['motivo'] %}<br>Motivo: {{ pz['motivo'] }}{% endif %}
+        </p>
+        {% if not aprovado_vigente %}
+        <div class="aviso-custo">A aprovação do cliente não está mais valendo (o orçamento mudou ou foi recusado).
+            Confirme esse prazo com o cliente.</div>
+        {% endif %}
+        {% endif %}
+
+        {% if usuario and usuario['tipo'] == 'DONO' %}
+        {% if aprovado_vigente %}
+        <form method="POST" action="{{ url_for('registrar_prazo', id=veiculo['id']) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="data_prevista">{{ 'Novo prazo de entrega' if prazos else 'Data de entrega prometida' }} *</label>
+            <input type="date" id="data_prevista" name="data_prevista" min="{{ hoje_iso }}" max="{{ maximo_iso }}" required>
+            {% if prazos %}
+            <label for="motivo">Motivo da mudança *</label>
+            <textarea id="motivo" name="motivo" rows="2" maxlength="{{ max_motivo }}"></textarea>
+            {% endif %}
+            <button type="submit">{{ 'Mudar o prazo' if prazos else 'Definir o prazo' }}</button>
+        </form>
+        {% else %}
+        <p class="aviso">O prazo só pode ser definido depois que o cliente aprovar o orçamento.</p>
+        {% endif %}
+        {% elif not prazos %}
+        <p class="aviso">O prazo de entrega é definido pelo dono da oficina, depois da aprovação do cliente.</p>
+        {% endif %}
+
+        {% if prazos|length > 1 %}
+        <details>
+            <summary>Histórico de prazos ({{ prazos|length }})</summary>
+            <div class="tabela-rolavel">
+            <table>
+                <tr><th>Definido em</th><th>Prazo</th><th>Por</th><th>Motivo</th></tr>
+                {% for p in prazos %}
+                <tr>
+                    <td>{{ p['criado_em'] }}</td>
+                    <td>{{ formatar_data(p['data_prevista']) }}</td>
+                    <td>{{ p['registrado_por'] }}</td>
+                    <td>{{ p['motivo'] or '-' }}</td>
                 </tr>
                 {% endfor %}
             </table>

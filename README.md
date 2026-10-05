@@ -16,6 +16,7 @@ Sistema de oficina mecânica (projeto de prática). Histórias de usuário em [H
 - **Aprovação do cliente** (história 6): com o orçamento completo, dono ou funcionário registra se o cliente **aprovou ou recusou**, como respondeu (pessoalmente, telefone ou WhatsApp) e uma observação. Ficam guardados quem registrou, quando e o valor total que o cliente viu, e todas as decisões formam um histórico.
   - Se o orçamento **mudar depois** (um valor mudar, ou um serviço entrar ou sair), a decisão **deixa de valer** e o sistema pede uma nova. Se mudar enquanto alguém registra, o sistema recusa e pede para conferir.
   - A lista de veículos mostra a situação de cada orçamento: sem orçamento, incompleto, aguardando o cliente, aprovado, recusado ou "mudou: precisa de nova decisão".
+- **Prazo de entrega** (história 7): depois que o cliente aprova o orçamento, **só o dono** define a data de entrega prometida (de hoje até 1 ano à frente). Mudar um prazo exige o **motivo**, e todos os prazos ficam no histórico (quem definiu, quando, qual data e por quê). A tela do veículo e a lista mostram a situação: sem prazo, faltam N dias, entrega amanhã, entrega hoje ou **atrasado há N dias**. O "hoje" usa o horário de Brasília, e não o do servidor.
 
 ## Login e usuários
 - **Ninguém usa o sistema sem entrar** com e-mail e senha. As senhas são guardadas protegidas (nunca "abertas"), com no mínimo 8 caracteres.

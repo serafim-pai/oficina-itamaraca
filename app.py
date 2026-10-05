@@ -3,7 +3,7 @@ import os
 import re
 import secrets
 import sqlite3
-from datetime import timedelta
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 
 from flask import (Flask, Response, abort, g, redirect, render_template, request,
@@ -32,6 +32,11 @@ DECISOES_APROVACAO = ("APROVADO", "RECUSADO")                  # história 6
 FORMAS_APROVACAO = ("PESSOALMENTE", "TELEFONE", "WHATSAPP")    # como o cliente respondeu
 NOMES_FORMAS_APROVACAO = {"PESSOALMENTE": "Pessoalmente", "TELEFONE": "Telefone", "WHATSAPP": "WhatsApp"}
 MAX_OBS_APROVACAO = 300                                        # letras da observação
+MAX_DIAS_PRAZO = 365                                           # história 7: prazo de até 1 ano à frente
+MAX_MOTIVO_PRAZO = 300                                         # letras do motivo de mudar o prazo
+# Horário de Brasília (o Brasil não tem mais horário de verão). O servidor trabalha em UTC,
+# 3 horas à frente, e por isso o "hoje" do prazo é calculado com este fuso.
+FUSO_BRASIL = timezone(timedelta(hours=-3))
 MAX_FOTOS = 10                       # fotos por cadastro
 MAX_BYTES_FOTO = 8 * 1024 * 1024     # tamanho máximo de cada foto enviada
 MAX_PIXELS_FOTO = 40_000_000         # evita imagens "bomba" que travariam o servidor
@@ -141,6 +146,20 @@ def init_db():
             observacao TEXT,
             total_centavos INTEGER NOT NULL,
             assinatura TEXT NOT NULL,
+            registrado_por TEXT,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    # História 7: cada prazo de entrega definido fica guardado (nunca é apagado nem sobrescrito);
+    # o último é o que vale. "motivo" explica por que o prazo foi mudado.
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS prazos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            veiculo_id INTEGER NOT NULL,
+            data_prevista TEXT NOT NULL,
+            motivo TEXT,
             registrado_por TEXT,
             criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
@@ -417,6 +436,41 @@ def situacoes_dos_veiculos(db, veiculos):
     return {v["id"]: situacao_aprovacao(servicos.get(v["id"], []), ultimas.get(v["id"])) for v in veiculos}
 
 
+def hoje_brasil(agora_utc=None):
+    """A data de hoje no Brasil. ('agora_utc' só existe para os testes.)"""
+    agora_utc = agora_utc or datetime.now(timezone.utc)
+    return agora_utc.astimezone(FUSO_BRASIL).date()
+
+
+def formatar_data(texto_iso):
+    """'2026-10-15' vira '15/10/2026'."""
+    return datetime.strptime(texto_iso, "%Y-%m-%d").strftime("%d/%m/%Y")
+
+
+def situacao_prazo(data_prevista, hoje):
+    """Situação do prazo de entrega. 'data_prevista' é um texto AAAA-MM-DD (ou None).
+    Devolve (chave, texto)."""
+    if not data_prevista:
+        return "SEM_PRAZO", "Sem prazo definido"
+    dias = (datetime.strptime(data_prevista, "%Y-%m-%d").date() - hoje).days
+    if dias < 0:
+        return "ATRASADO", f"Atrasado há {-dias} dia{'s' if dias != -1 else ''}"
+    if dias == 0:
+        return "HOJE", "Entrega hoje"
+    if dias == 1:
+        return "PROXIMO", "Entrega amanhã"
+    return ("PROXIMO" if dias <= 3 else "NO_PRAZO"), f"Faltam {dias} dias"
+
+
+def prazos_dos_veiculos(db, veiculos):
+    """Situação do prazo de cada veículo da lista, com uma consulta só."""
+    ultimos = {}
+    for p in db.execute("SELECT veiculo_id, data_prevista FROM prazos ORDER BY id"):
+        ultimos[p["veiculo_id"]] = p["data_prevista"]       # a última linha de cada veículo é a que vale
+    hoje = hoje_brasil()
+    return {v["id"]: situacao_prazo(ultimos.get(v["id"]), hoje) for v in veiculos}
+
+
 def pagina_inicial(erros=None, dados=None):
     """Desenha a tela de cadastro com a lista de veículos e as fotos de cada um."""
     db = get_db()
@@ -427,7 +481,8 @@ def pagina_inicial(erros=None, dados=None):
     return render_template("index.html", veiculos=veiculos, fotos=fotos, erros=erros or [],
                            dados=dados or {}, max_fotos=MAX_FOTOS,
                            max_mb=MAX_BYTES_FOTO // (1024 * 1024),
-                           situacoes=situacoes_dos_veiculos(db, veiculos))
+                           situacoes=situacoes_dos_veiculos(db, veiculos),
+                           prazos=prazos_dos_veiculos(db, veiculos))
 
 
 @app.route("/")
@@ -608,7 +663,14 @@ def pagina_veiculo(id, erros=None, dados=None):
     orcamento_completo = bool(servicos) and faltam == 0
     aprovacoes = db.execute("SELECT * FROM aprovacoes WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
     situacao, situacao_texto = situacao_aprovacao(servicos, aprovacoes[0] if aprovacoes else None)
+    prazos = db.execute("SELECT * FROM prazos WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
+    hoje = hoje_brasil()
+    prazo_chave, prazo_texto = situacao_prazo(prazos[0]["data_prevista"] if prazos else None, hoje)
     return render_template("veiculo.html", veiculo=veiculo, servicos=servicos, fotos=fotos,
+                           prazos=prazos, prazo_chave=prazo_chave, prazo_texto=prazo_texto,
+                           aprovado_vigente=(situacao == "APROVADO"), hoje_iso=hoje.isoformat(),
+                           maximo_iso=(hoje + timedelta(days=MAX_DIAS_PRAZO)).isoformat(),
+                           formatar_data=formatar_data, max_motivo=MAX_MOTIVO_PRAZO,
                            tipos=TIPOS_SERVICO, max_problema=MAX_PROBLEMA,
                            erros=erros or [], dados=dados or {},
                            total_centavos=total_centavos, faltam_valor=faltam,
@@ -756,6 +818,52 @@ def registrar_aprovacao(id):
                "assinatura, registrado_por) VALUES (?, ?, ?, ?, ?, ?, ?)",
                (id, decisao, forma, observacao or None, total, assinatura_orcamento(servicos),
                 g.usuario["nome"]))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/prazo", methods=["POST"])
+def registrar_prazo(id):
+    """História 7: o dono define (ou muda) o prazo de entrega prometido ao cliente.
+    Só vale depois que o cliente aprovou o orçamento. Mudar um prazo já definido exige o motivo.
+    Cada prazo fica no histórico, e o último é o que vale."""
+    so_dono()
+    db = get_db()
+    buscar_veiculo(db, id)
+    servicos = db.execute("SELECT * FROM servicos WHERE veiculo_id = ? ORDER BY id", (id,)).fetchall()
+    ultima_aprovacao = db.execute("SELECT * FROM aprovacoes WHERE veiculo_id = ? ORDER BY id DESC LIMIT 1",
+                                  (id,)).fetchone()
+    atual = db.execute("SELECT * FROM prazos WHERE veiculo_id = ? ORDER BY id DESC LIMIT 1", (id,)).fetchone()
+    texto = request.form.get("data_prevista", "").strip()
+    motivo = " ".join(request.form.get("motivo", "").split())
+    hoje = hoje_brasil()
+
+    erros = []
+    if situacao_aprovacao(servicos, ultima_aprovacao)[0] != "APROVADO":
+        erros.append("O prazo de entrega só pode ser definido depois que o cliente aprovar o orçamento.")
+    data = None
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", texto):
+        try:
+            data = datetime.strptime(texto, "%Y-%m-%d").date()
+        except ValueError:
+            data = None
+    if data is None:
+        erros.append("Escolha a data de entrega.")
+    elif data < hoje:
+        erros.append("O prazo não pode ser uma data que já passou.")
+    elif data > hoje + timedelta(days=MAX_DIAS_PRAZO):
+        erros.append(f"O prazo pode ser no máximo daqui a {MAX_DIAS_PRAZO} dias.")
+    elif atual and data.isoformat() == atual["data_prevista"]:
+        erros.append("Essa já é a data do prazo atual.")
+    elif atual and sum(1 for letra in motivo if letra.isalpha()) < 3:
+        erros.append("Para mudar o prazo, explique o motivo.")
+    if len(motivo) > MAX_MOTIVO_PRAZO:
+        erros.append(f"O motivo pode ter no máximo {MAX_MOTIVO_PRAZO} letras.")
+    if erros:
+        return pagina_veiculo(id, erros)
+
+    db.execute("INSERT INTO prazos (veiculo_id, data_prevista, motivo, registrado_por) VALUES (?, ?, ?, ?)",
+               (id, data.isoformat(), motivo or None, g.usuario["nome"]))
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
 
