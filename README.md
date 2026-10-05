@@ -10,6 +10,8 @@ Sistema de oficina mecânica (projeto de prática). Histórias de usuário em [H
   - Se qualquer foto for recusada, **nada** é cadastrado (nem o veículo, nem as outras fotos).
   - As fotos ficam na pasta `fotos/` (fora do GitHub e fora da pasta pública) e só aparecem para quem entrou no sistema.
 
+- **Problemas e tipos de serviço** (história 3): clique na placa na lista para abrir a página do veículo e registrar cada problema com o tipo de serviço (lataria, pintura, mecânica, elétrica, suspensão, freios, polimento e estética ou outro). Fica guardado quem registrou e quando; só o dono exclui.
+
 ## Login e usuários
 - **Ninguém usa o sistema sem entrar** com e-mail e senha. As senhas são guardadas protegidas (nunca "abertas"), com no mínimo 8 caracteres.
 - **Primeiro acesso**: na primeira vez, o sistema pede para criar o **DONO** da oficina. Na hospedagem, isso exige também o *código de instalação* (variável `OFICINA_CODIGO_INICIAL`), para ninguém tomar o sistema antes do dono.

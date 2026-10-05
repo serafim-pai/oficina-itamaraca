@@ -21,6 +21,19 @@ Critérios de aceitação:
 - Não pode salvar o veículo sem marcar que o documento do carro
   (original ou cópia impressa) foi deixado na oficina.
 
+## História 3 - Registrar os problemas e tipos de serviço
+Como dono da oficina, quero registrar cada problema encontrado no
+veículo junto com o tipo de serviço necessário, para toda a equipe
+saber o que precisa ser feito e para montar o orçamento depois.
+
+Critérios de aceitação:
+- Não pode registrar sem escolher o tipo de serviço (lataria, pintura,
+  mecânica, elétrica, suspensão, freios, polimento e estética ou outro).
+- Não pode registrar sem descrever o problema.
+- Um veículo pode ter vários problemas registrados.
+- Fica guardado quem registrou e quando.
+- Só o dono pode excluir um problema registrado por engano.
+
 ## História 8 - Registrar a garantia
 Como dono da oficina, quero registrar o tempo de garantia de cada
 serviço e as condições que cancelam a garantia, para o cliente sair

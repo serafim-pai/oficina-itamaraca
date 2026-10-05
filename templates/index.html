@@ -75,7 +75,7 @@
         {% for v in veiculos %}
         <tr>
             <td>{{ v['responsavel'] }}</td>
-            <td>{{ v['placa'] }}</td>
+            <td><a href="{{ url_for('ver_veiculo', id=v['id']) }}">{{ v['placa'] }}</a></td>
             <td class="fotos">
                 {% for foto_id in fotos.get(v['id'], []) %}
                 <a href="{{ url_for('foto', id=foto_id) }}" target="_blank" rel="noopener">

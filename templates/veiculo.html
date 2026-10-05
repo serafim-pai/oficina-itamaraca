@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Veículo {{ veiculo['placa'] }} - Oficina Itamaracá</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+    {% include '_menu.html' %}
+    <h1>{{ veiculo['placa'] }}</h1>
+    <p><a href="{{ url_for('index') }}">&larr; Voltar aos veículos</a></p>
+
+    <p>
+        <strong>Responsável:</strong> {{ veiculo['responsavel'] or '-' }}<br>
+        <strong>Veículo:</strong> {{ veiculo['marca'] or '-' }} {{ veiculo['modelo'] }} {{ veiculo['cor'] }} {{ veiculo['ano'] }}<br>
+        <strong>Km:</strong> {{ veiculo['quilometragem'] or '-' }}
+    </p>
+    {% if fotos %}
+    <div class="fotos">
+        {% for foto_id in fotos %}
+        <a href="{{ url_for('foto', id=foto_id) }}" target="_blank" rel="noopener">
+            <img src="{{ url_for('foto_miniatura', id=foto_id) }}" alt="Foto do veículo {{ veiculo['placa'] }}" loading="lazy">
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if erros %}
+    <div class="erros">
+        <ul>
+            {% for erro in erros %}
+            <li>{{ erro }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <h2>Registrar problema e tipo de serviço</h2>
+    <form method="POST" action="{{ url_for('registrar_servico', id=veiculo['id']) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="tipo">Tipo de serviço *</label>
+        <select id="tipo" name="tipo">
+            <option value="">Escolha...</option>
+            {% for t in tipos %}
+            <option value="{{ t }}" {{ 'selected' if dados.get('tipo') == t }}>{{ t }}</option>
+            {% endfor %}
+        </select>
+
+        <label for="problema">Problema encontrado *</label>
+        <textarea id="problema" name="problema" rows="3" maxlength="{{ max_problema }}">{{ dados.get('problema', '') }}</textarea>
+
+        <button type="submit">Registrar</button>
+    </form>
+
+    <h2>Problemas registrados</h2>
+    {% if servicos %}
+    <div class="tabela-rolavel">
+    <table>
+        <tr>
+            <th>Tipo</th>
+            <th>Problema</th>
+            <th>Registrado por</th>
+            <th>Data</th>
+            {% if usuario and usuario['tipo'] == 'DONO' %}<th></th>{% endif %}
+        </tr>
+        {% for s in servicos %}
+        <tr>
+            <td>{{ s['tipo'] }}</td>
+            <td>{{ s['problema'] }}</td>
+            <td>{{ s['registrado_por'] }}</td>
+            <td>{{ s['criado_em'] }}</td>
+            {% if usuario and usuario['tipo'] == 'DONO' %}
+            <td class="acoes">
+                <form method="POST" action="{{ url_for('excluir_servico', id=veiculo['id'], servico_id=s['id']) }}"
+                      onsubmit="return confirm('Excluir este problema?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit">Excluir</button>
+                </form>
+            </td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+    </table>
+    </div>
+    {% else %}
+    <p>Nenhum problema registrado ainda.</p>
+    {% endif %}
+</body>
+</html>

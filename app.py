@@ -23,6 +23,9 @@ DATABASE = os.environ.get("OFICINA_DB") or os.path.join(
 PASTA_FOTOS = os.environ.get("OFICINA_FOTOS") or os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "fotos"
 )
+TIPOS_SERVICO = ("LATARIA", "PINTURA", "MECÂNICA", "ELÉTRICA", "SUSPENSÃO", "FREIOS",
+                 "POLIMENTO E ESTÉTICA", "OUTRO")
+MAX_PROBLEMA = 500                   # letras da descrição de um problema
 MAX_FOTOS = 10                       # fotos por cadastro
 MAX_BYTES_FOTO = 8 * 1024 * 1024     # tamanho máximo de cada foto enviada
 MAX_PIXELS_FOTO = 40_000_000         # evita imagens "bomba" que travariam o servidor
@@ -104,6 +107,18 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             veiculo_id INTEGER NOT NULL,
             arquivo TEXT NOT NULL,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS servicos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            veiculo_id INTEGER NOT NULL,
+            tipo TEXT NOT NULL,
+            problema TEXT NOT NULL,
+            registrado_por TEXT,
             criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
         """
@@ -505,6 +520,63 @@ def cadastrar_veiculo():
                 os.remove(caminho)
         raise
     return redirect(url_for("index"))
+
+
+# ---------- PROBLEMAS E TIPOS DE SERVIÇO (por veículo) ----------
+
+def buscar_veiculo(db, id):
+    veiculo = db.execute("SELECT * FROM veiculos WHERE id = ?", (id,)).fetchone()
+    if not veiculo:
+        abort(404)
+    return veiculo
+
+
+def pagina_veiculo(id, erros=None, dados=None):
+    db = get_db()
+    veiculo = buscar_veiculo(db, id)
+    servicos = db.execute("SELECT * FROM servicos WHERE veiculo_id = ? ORDER BY id", (id,)).fetchall()
+    fotos = [f["id"] for f in db.execute("SELECT id FROM fotos WHERE veiculo_id = ? ORDER BY id", (id,))]
+    return render_template("veiculo.html", veiculo=veiculo, servicos=servicos, fotos=fotos,
+                           tipos=TIPOS_SERVICO, max_problema=MAX_PROBLEMA,
+                           erros=erros or [], dados=dados or {})
+
+
+@app.route("/veiculos/<int:id>")
+def ver_veiculo(id):
+    return pagina_veiculo(id)
+
+
+@app.route("/veiculos/<int:id>/servicos", methods=["POST"])
+def registrar_servico(id):
+    db = get_db()
+    buscar_veiculo(db, id)
+    tipo = request.form.get("tipo", "").strip().upper()
+    problema = " ".join(request.form.get("problema", "").split())
+
+    erros = []
+    if tipo not in TIPOS_SERVICO:
+        erros.append("Escolha o tipo de serviço.")
+    if sum(1 for letra in problema if letra.isalpha()) < 3:
+        erros.append("Descreva o problema encontrado no veículo.")
+    elif len(problema) > MAX_PROBLEMA:
+        erros.append(f"A descrição do problema pode ter no máximo {MAX_PROBLEMA} letras.")
+    if erros:
+        return pagina_veiculo(id, erros, {"tipo": tipo, "problema": problema})
+
+    db.execute("INSERT INTO servicos (veiculo_id, tipo, problema, registrado_por) VALUES (?, ?, ?, ?)",
+               (id, tipo, problema, g.usuario["nome"]))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/excluir", methods=["POST"])
+def excluir_servico(id, servico_id):
+    """Só o dono apaga um problema registrado por engano."""
+    so_dono()
+    db = get_db()
+    db.execute("DELETE FROM servicos WHERE id = ? AND veiculo_id = ?", (servico_id, id))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
 
 
 if __name__ == "__main__":
