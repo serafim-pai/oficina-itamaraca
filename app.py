@@ -1,3 +1,4 @@
+import hashlib
 import os
 import re
 import secrets
@@ -27,6 +28,10 @@ TIPOS_SERVICO = ("LATARIA", "PINTURA", "MECÂNICA", "ELÉTRICA", "SUSPENSÃO", "
                  "POLIMENTO E ESTÉTICA", "OUTRO")
 MAX_PROBLEMA = 500                   # letras da descrição de um problema
 MAX_VALOR_CENTAVOS = 100_000_000     # limite de sanidade: R$ 1.000.000,00 por serviço
+DECISOES_APROVACAO = ("APROVADO", "RECUSADO")                  # história 6
+FORMAS_APROVACAO = ("PESSOALMENTE", "TELEFONE", "WHATSAPP")    # como o cliente respondeu
+NOMES_FORMAS_APROVACAO = {"PESSOALMENTE": "Pessoalmente", "TELEFONE": "Telefone", "WHATSAPP": "WhatsApp"}
+MAX_OBS_APROVACAO = 300                                        # letras da observação
 MAX_FOTOS = 10                       # fotos por cadastro
 MAX_BYTES_FOTO = 8 * 1024 * 1024     # tamanho máximo de cada foto enviada
 MAX_PIXELS_FOTO = 40_000_000         # evita imagens "bomba" que travariam o servidor
@@ -119,6 +124,23 @@ def init_db():
             veiculo_id INTEGER NOT NULL,
             tipo TEXT NOT NULL,
             problema TEXT NOT NULL,
+            registrado_por TEXT,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    # História 6: cada decisão do cliente fica guardada (nunca é apagada nem sobrescrita);
+    # a última é a que vale. "assinatura" identifica o orçamento que o cliente viu.
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS aprovacoes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            veiculo_id INTEGER NOT NULL,
+            decisao TEXT NOT NULL,
+            forma TEXT NOT NULL,
+            observacao TEXT,
+            total_centavos INTEGER NOT NULL,
+            assinatura TEXT NOT NULL,
             registrado_por TEXT,
             criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
@@ -361,6 +383,40 @@ def alternar_usuario(id):
 
 # ---------- VEÍCULOS ----------
 
+def assinatura_orcamento(servicos):
+    """Impressão digital do orçamento: muda se um serviço entrar, sair ou mudar de valor.
+    Serve para saber se a aprovação do cliente ainda vale para o orçamento de hoje."""
+    texto = "|".join(f"{s['id']}:{s['valor_centavos']}" for s in sorted(servicos, key=lambda s: s["id"]))
+    return hashlib.sha256(texto.encode()).hexdigest()[:16]
+
+
+def situacao_aprovacao(servicos, ultima):
+    """Em que pé está a aprovação do cliente. Devolve (chave, texto).
+    'ultima' é a decisão mais recente registrada (ou None)."""
+    if not servicos:
+        return "SEM_ORCAMENTO", "Sem orçamento"
+    if any(s["valor_centavos"] is None for s in servicos):
+        return "INCOMPLETO", "Orçamento incompleto"
+    if not ultima:
+        return "AGUARDANDO", "Aguardando o cliente"
+    if ultima["assinatura"] != assinatura_orcamento(servicos):
+        return "DESATUALIZADA", "Orçamento mudou: precisa de nova decisão"
+    if ultima["decisao"] == "APROVADO":
+        return "APROVADO", "Aprovado pelo cliente"
+    return "RECUSADO", "Recusado pelo cliente"
+
+
+def situacoes_dos_veiculos(db, veiculos):
+    """Situação da aprovação de cada veículo da lista, com poucas consultas ao banco."""
+    servicos = {}
+    for s in db.execute("SELECT id, veiculo_id, valor_centavos FROM servicos ORDER BY id"):
+        servicos.setdefault(s["veiculo_id"], []).append(s)
+    ultimas = {}
+    for a in db.execute("SELECT veiculo_id, decisao, assinatura FROM aprovacoes ORDER BY id"):
+        ultimas[a["veiculo_id"]] = a          # a última linha de cada veículo é a que vale
+    return {v["id"]: situacao_aprovacao(servicos.get(v["id"], []), ultimas.get(v["id"])) for v in veiculos}
+
+
 def pagina_inicial(erros=None, dados=None):
     """Desenha a tela de cadastro com a lista de veículos e as fotos de cada um."""
     db = get_db()
@@ -370,7 +426,8 @@ def pagina_inicial(erros=None, dados=None):
         fotos.setdefault(foto["veiculo_id"], []).append(foto["id"])
     return render_template("index.html", veiculos=veiculos, fotos=fotos, erros=erros or [],
                            dados=dados or {}, max_fotos=MAX_FOTOS,
-                           max_mb=MAX_BYTES_FOTO // (1024 * 1024))
+                           max_mb=MAX_BYTES_FOTO // (1024 * 1024),
+                           situacoes=situacoes_dos_veiculos(db, veiculos))
 
 
 @app.route("/")
@@ -549,11 +606,17 @@ def pagina_veiculo(id, erros=None, dados=None):
     total_centavos = sum(s["valor_centavos"] or 0 for s in servicos)
     faltam = sum(1 for s in servicos if s["valor_centavos"] is None)
     orcamento_completo = bool(servicos) and faltam == 0
+    aprovacoes = db.execute("SELECT * FROM aprovacoes WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
+    situacao, situacao_texto = situacao_aprovacao(servicos, aprovacoes[0] if aprovacoes else None)
     return render_template("veiculo.html", veiculo=veiculo, servicos=servicos, fotos=fotos,
                            tipos=TIPOS_SERVICO, max_problema=MAX_PROBLEMA,
                            erros=erros or [], dados=dados or {},
                            total_centavos=total_centavos, faltam_valor=faltam,
-                           orcamento_completo=orcamento_completo, formatar_dinheiro=formatar_dinheiro)
+                           orcamento_completo=orcamento_completo, formatar_dinheiro=formatar_dinheiro,
+                           aprovacoes=aprovacoes, situacao=situacao, situacao_texto=situacao_texto,
+                           assinatura=assinatura_orcamento(servicos), decisoes=DECISOES_APROVACAO,
+                           formas=FORMAS_APROVACAO, nomes_formas=NOMES_FORMAS_APROVACAO,
+                           max_obs=MAX_OBS_APROVACAO)
 
 
 @app.route("/veiculos/<int:id>")
@@ -657,6 +720,42 @@ def registrar_valor(id, servico_id):
         return pagina_veiculo(id, ["Informe um valor válido para o serviço (exemplo: 150,00)."])
 
     db.execute("UPDATE servicos SET valor_centavos = ? WHERE id = ?", (centavos, servico_id))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/aprovacao", methods=["POST"])
+def registrar_aprovacao(id):
+    """História 6: registra se o cliente aprovou ou recusou o orçamento.
+    Dono e funcionário podem registrar (quem atendeu o cliente). Cada decisão fica guardada
+    com quem registrou, quando, como o cliente respondeu e o valor total que ele viu."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    servicos = db.execute("SELECT * FROM servicos WHERE veiculo_id = ? ORDER BY id", (id,)).fetchall()
+    decisao = request.form.get("decisao", "").strip().upper()
+    forma = request.form.get("forma", "").strip().upper()
+    observacao = " ".join(request.form.get("observacao", "").split())
+
+    erros = []
+    if not servicos or any(s["valor_centavos"] is None for s in servicos):
+        erros.append("A decisão do cliente só pode ser registrada com o orçamento completo "
+                     "(todos os serviços com valor).")
+    elif request.form.get("assinatura", "") != assinatura_orcamento(servicos):
+        erros.append("O orçamento mudou enquanto você registrava. Confira os valores e registre de novo.")
+    if decisao not in DECISOES_APROVACAO:
+        erros.append("Escolha se o cliente aprovou ou recusou o orçamento.")
+    if forma not in FORMAS_APROVACAO:
+        erros.append("Escolha como o cliente respondeu (pessoalmente, telefone ou WhatsApp).")
+    if len(observacao) > MAX_OBS_APROVACAO:
+        erros.append(f"A observação pode ter no máximo {MAX_OBS_APROVACAO} letras.")
+    if erros:
+        return pagina_veiculo(id, erros)
+
+    total = sum(s["valor_centavos"] for s in servicos)
+    db.execute("INSERT INTO aprovacoes (veiculo_id, decisao, forma, observacao, total_centavos, "
+               "assinatura, registrado_por) VALUES (?, ?, ?, ?, ?, ?, ?)",
+               (id, decisao, forma, observacao or None, total, assinatura_orcamento(servicos),
+                g.usuario["nome"]))
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
 

@@ -57,6 +57,29 @@ Critérios de aceitação:
 - O orçamento só é considerado completo quando todos os serviços do
   veículo têm valor definido.
 
+## História 6 - Registrar a aprovação do cliente
+Como dono da oficina, quero registrar se o cliente aprovou ou recusou o
+orçamento, para só começar o serviço depois da aprovação e ter como
+comprovar o que o cliente decidiu.
+
+Critérios de aceitação (escritos pelo Claude a partir do título do mapa;
+o dono deve revisar):
+- Só dá para registrar a decisão do cliente quando o orçamento está
+  completo (todos os serviços com valor).
+- A decisão é "aprovado" ou "recusado", com a forma como o cliente
+  respondeu (pessoalmente, telefone ou WhatsApp) e uma observação
+  opcional.
+- Ficam guardados: quem registrou, quando e o valor total que o cliente
+  viu. Dono e funcionário podem registrar.
+- Cada decisão fica no histórico; a mais recente é a que vale.
+- Se o orçamento mudar depois da decisão (um valor mudar, ou um serviço
+  entrar ou sair), a decisão deixa de valer e o sistema pede uma nova.
+- Se o orçamento mudar enquanto alguém registra a decisão, o sistema
+  recusa e pede para conferir os valores.
+- A lista de veículos mostra a situação de cada orçamento: sem
+  orçamento, incompleto, aguardando o cliente, aprovado, recusado ou
+  "mudou: precisa de nova decisão".
+
 ## História 8 - Registrar a garantia
 Como dono da oficina, quero registrar o tempo de garantia de cada
 serviço e as condições que cancelam a garantia, para o cliente sair

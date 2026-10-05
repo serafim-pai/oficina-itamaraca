@@ -10,6 +10,7 @@
     {% include '_menu.html' %}
     <h1>{{ veiculo['placa'] }}</h1>
     <p><a href="{{ url_for('index') }}">&larr; Voltar aos veículos</a></p>
+    <p>Orçamento: <span class="selo selo-{{ situacao|lower|replace('_', '-') }}">{{ situacao_texto }}</span></p>
 
     <p>
         <strong>Responsável:</strong> {{ veiculo['responsavel'] or '-' }}<br>
@@ -116,6 +117,78 @@
         {% if total_centavos %}
         <p>Soma dos valores já informados: {{ formatar_dinheiro(total_centavos) }}</p>
         {% endif %}
+        {% endif %}
+    </div>
+
+    <div class="aprovacao">
+        <h2>Aprovação do cliente</h2>
+        <p><span class="selo selo-{{ situacao|lower|replace('_', '-') }}">{{ situacao_texto }}</span></p>
+
+        {% if aprovacoes %}
+        {% set ult = aprovacoes[0] %}
+        <p class="detalhe">
+            Última decisão: <strong>{{ 'Aprovado' if ult['decisao'] == 'APROVADO' else 'Recusado' }}</strong>
+            ({{ formatar_dinheiro(ult['total_centavos']) }})<br>
+            Resposta do cliente: {{ nomes_formas.get(ult['forma'], ult['forma']) }}<br>
+            Registrada por {{ ult['registrado_por'] }} em {{ ult['criado_em'] }}
+            {% if ult['observacao'] %}<br>Observação: {{ ult['observacao'] }}{% endif %}
+        </p>
+        {% if situacao not in ('APROVADO', 'RECUSADO') %}
+        <div class="aviso-custo">Essa decisão era de um orçamento anterior e <strong>não vale mais</strong>:
+            os serviços ou valores mudaram depois dela.{% if orcamento_completo %} Registre uma nova decisão do cliente.{% endif %}</div>
+        {% endif %}
+        {% endif %}
+
+        {% if orcamento_completo %}
+        <form method="POST" action="{{ url_for('registrar_aprovacao', id=veiculo['id']) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="assinatura" value="{{ assinatura }}">
+            <strong>O cliente *</strong>
+            <div class="checkbox-linha">
+                <input type="radio" id="dec_aprovado" name="decisao" value="APROVADO">
+                <label for="dec_aprovado">Aprovou o orçamento de {{ formatar_dinheiro(total_centavos) }}</label>
+            </div>
+            <div class="checkbox-linha">
+                <input type="radio" id="dec_recusado" name="decisao" value="RECUSADO">
+                <label for="dec_recusado">Recusou o orçamento</label>
+            </div>
+
+            <label for="forma">Como o cliente respondeu *</label>
+            <select id="forma" name="forma">
+                <option value="">Escolha...</option>
+                {% for f in formas %}
+                <option value="{{ f }}">{{ nomes_formas[f] }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="observacao">Observação (opcional)</label>
+            <textarea id="observacao" name="observacao" rows="2" maxlength="{{ max_obs }}"></textarea>
+
+            <button type="submit">Registrar decisão do cliente</button>
+        </form>
+        {% else %}
+        <p class="aviso">Para registrar a decisão do cliente, todos os serviços precisam ter valor (veja o orçamento acima).</p>
+        {% endif %}
+
+        {% if aprovacoes|length > 1 %}
+        <details>
+            <summary>Histórico de decisões ({{ aprovacoes|length }})</summary>
+            <div class="tabela-rolavel">
+            <table>
+                <tr><th>Quando</th><th>Decisão</th><th>Valor</th><th>Como</th><th>Registrado por</th><th>Observação</th></tr>
+                {% for a in aprovacoes %}
+                <tr>
+                    <td>{{ a['criado_em'] }}</td>
+                    <td>{{ 'Aprovado' if a['decisao'] == 'APROVADO' else 'Recusado' }}</td>
+                    <td>{{ formatar_dinheiro(a['total_centavos']) }}</td>
+                    <td>{{ nomes_formas.get(a['forma'], a['forma']) }}</td>
+                    <td>{{ a['registrado_por'] }}</td>
+                    <td>{{ a['observacao'] or '-' }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            </div>
+        </details>
         {% endif %}
     </div>
     {% else %}

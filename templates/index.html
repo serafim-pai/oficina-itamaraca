@@ -65,6 +65,7 @@
             <th>Responsável</th>
             <th>Placa</th>
             <th>Fotos</th>
+            <th>Orçamento</th>
             <th>Marca</th>
             <th>Modelo</th>
             <th>Cor</th>
@@ -83,6 +84,8 @@
                 </a>
                 {% else %}-{% endfor %}
             </td>
+            {% set sit = situacoes[v['id']] %}
+            <td><span class="selo selo-{{ sit[0]|lower|replace('_', '-') }}">{{ sit[1] }}</span></td>
             <td>{{ v['marca'] }}</td>
             <td>{{ v['modelo'] }}</td>
             <td>{{ v['cor'] }}</td>

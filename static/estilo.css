@@ -113,6 +113,21 @@ td.valor form { gap: 4px; }
 td.valor input { width: 90px; }
 td.valor button { margin-top: 0; padding: 4px 10px; }
 .orcamento { margin-top: 20px; }
+
+/* Aprovação do cliente (história 6) */
+.aprovacao { margin-top: 20px; }
+.aprovacao .detalhe { background: #f4f6fa; border-radius: 4px; padding: 8px 10px; }
+.aprovacao details { margin-top: 12px; }
+.aprovacao summary { cursor: pointer; font-weight: bold; }
+.aviso-custo { background: #fff3cd; border: 1px solid #ffc107; color: #5c4400; border-radius: 4px;
+               padding: 8px 10px; margin: 10px 0; }
+.selo { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 13px; font-weight: bold;
+        white-space: nowrap; background: #e5e5e5; color: #444; }
+.selo-aprovado { background: #d4edda; color: #155724; }
+.selo-recusado { background: #f8d7da; color: #721c24; }
+.selo-aguardando { background: #fff3cd; color: #856404; }
+.selo-desatualizada { background: #ffe0b2; color: #8a3200; }
+.selo-incompleto, .selo-sem-orcamento { background: #e5e5e5; color: #555; }
 .bloqueado { color: #8a1c1c; font-weight: bold; }
 
 @media (max-width: 600px) {

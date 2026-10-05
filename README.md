@@ -11,6 +11,11 @@ Sistema de oficina mecânica (projeto de prática). Histórias de usuário em [H
   - As fotos ficam na pasta `fotos/` (fora do GitHub e fora da pasta pública) e só aparecem para quem entrou no sistema.
 
 - **Problemas e tipos de serviço** (história 3): clique na placa na lista para abrir a página do veículo e registrar cada problema com o tipo de serviço (lataria, pintura, mecânica, elétrica, suspensão, freios, polimento e estética ou outro). Fica guardado quem registrou e quando; só o dono exclui.
+- **Como resolver** (história 4): para cada problema, anote como ele será resolvido (dá para editar depois; fica guardado quem escreveu).
+- **Orçamento** (história 5): só o dono define o valor (em R$) de cada serviço (aceita `150`, `150,00`, `150.00` e `1.250,50`). O total é a soma dos serviços, e o orçamento só é **completo** quando todos têm valor.
+- **Aprovação do cliente** (história 6): com o orçamento completo, dono ou funcionário registra se o cliente **aprovou ou recusou**, como respondeu (pessoalmente, telefone ou WhatsApp) e uma observação. Ficam guardados quem registrou, quando e o valor total que o cliente viu, e todas as decisões formam um histórico.
+  - Se o orçamento **mudar depois** (um valor mudar, ou um serviço entrar ou sair), a decisão **deixa de valer** e o sistema pede uma nova. Se mudar enquanto alguém registra, o sistema recusa e pede para conferir.
+  - A lista de veículos mostra a situação de cada orçamento: sem orçamento, incompleto, aguardando o cliente, aprovado, recusado ou "mudou: precisa de nova decisão".
 
 ## Login e usuários
 - **Ninguém usa o sistema sem entrar** com e-mail e senha. As senhas são guardadas protegidas (nunca "abertas"), com no mínimo 8 caracteres.
