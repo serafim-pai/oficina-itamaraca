@@ -60,6 +60,7 @@
         <tr>
             <th>Tipo</th>
             <th>Problema</th>
+            <th>Como resolver</th>
             <th>Registrado por</th>
             <th>Data</th>
             {% if usuario and usuario['tipo'] == 'DONO' %}<th></th>{% endif %}
@@ -68,6 +69,15 @@
         <tr>
             <td>{{ s['tipo'] }}</td>
             <td>{{ s['problema'] }}</td>
+            <td class="resolucao">
+                <form method="POST" action="{{ url_for('registrar_resolucao', id=veiculo['id'], servico_id=s['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <textarea name="como_resolver" rows="3" maxlength="{{ max_problema }}"
+                              aria-label="Como resolver">{{ s['como_resolver'] or '' }}</textarea>
+                    <button type="submit">{{ 'Atualizar' if s['como_resolver'] else 'Salvar' }}</button>
+                </form>
+                {% if s['como_resolver'] %}<span class="aviso">Por {{ s['resolvido_por'] }}</span>{% endif %}
+            </td>
             <td>{{ s['registrado_por'] }}</td>
             <td>{{ s['criado_em'] }}</td>
             {% if usuario and usuario['tipo'] == 'DONO' %}

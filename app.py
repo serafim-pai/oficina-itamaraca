@@ -145,6 +145,12 @@ def init_db():
         )
         """
     )
+    # Bancos criados antes da história 4 ainda não têm a coluna "como_resolver"
+    colunas = [c[1] for c in db.execute("PRAGMA table_info(servicos)")]
+    if "como_resolver" not in colunas:
+        db.execute("ALTER TABLE servicos ADD COLUMN como_resolver TEXT")
+    if "resolvido_por" not in colunas:
+        db.execute("ALTER TABLE servicos ADD COLUMN resolvido_por TEXT")
     db.commit()
     db.close()
     os.makedirs(PASTA_FOTOS, exist_ok=True)
@@ -565,6 +571,31 @@ def registrar_servico(id):
 
     db.execute("INSERT INTO servicos (veiculo_id, tipo, problema, registrado_por) VALUES (?, ?, ?, ?)",
                (id, tipo, problema, g.usuario["nome"]))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/resolucao", methods=["POST"])
+def registrar_resolucao(id, servico_id):
+    """História 4: anota como o problema será resolvido (dá para editar depois)."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    servico = db.execute("SELECT id FROM servicos WHERE id = ? AND veiculo_id = ?",
+                         (servico_id, id)).fetchone()
+    if not servico:
+        abort(404)
+    texto = " ".join(request.form.get("como_resolver", "").split())
+
+    erros = []
+    if sum(1 for letra in texto if letra.isalpha()) < 3:
+        erros.append("Descreva como o problema será resolvido.")
+    elif len(texto) > MAX_PROBLEMA:
+        erros.append(f"A descrição de como resolver pode ter no máximo {MAX_PROBLEMA} letras.")
+    if erros:
+        return pagina_veiculo(id, erros)
+
+    db.execute("UPDATE servicos SET como_resolver = ?, resolvido_por = ? WHERE id = ?",
+               (texto, g.usuario["nome"], servico_id))
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
 

@@ -34,6 +34,17 @@ Critérios de aceitação:
 - Fica guardado quem registrou e quando.
 - Só o dono pode excluir um problema registrado por engano.
 
+## História 4 - Registrar como resolver
+Como dono da oficina, quero anotar como cada problema será resolvido,
+para os colaboradores saberem o que fazer e para usar isso no
+orçamento.
+
+Critérios de aceitação:
+- Cada problema registrado tem seu campo "Como resolver".
+- Não pode salvar a solução em branco.
+- Dá para corrigir a solução depois.
+- Fica guardado quem escreveu.
+
 ## História 8 - Registrar a garantia
 Como dono da oficina, quero registrar o tempo de garantia de cada
 serviço e as condições que cancelam a garantia, para o cliente sair

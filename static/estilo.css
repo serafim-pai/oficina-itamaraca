@@ -105,6 +105,9 @@ input[type="file"] { padding: 6px 0; }
 /* Tela de usuários */
 td.acoes form { display: inline; }
 td.acoes button { margin: 0; padding: 4px 10px; }
+td.resolucao { min-width: 200px; }
+td.resolucao form { gap: 4px; }
+td.resolucao button { margin-top: 0; padding: 4px 10px; }
 .bloqueado { color: #8a1c1c; font-weight: bold; }
 
 @media (max-width: 600px) {

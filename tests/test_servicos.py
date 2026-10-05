@@ -78,6 +78,52 @@ class ServicoTest(BaseTest):
         self.assertEqual(r.status_code, 302)
         self.assertEqual(self.total(), 0)
 
+    # ---- história 4: como resolver ----
+    def novo_servico(self):
+        self.c.post(f"/veiculos/{self.vid}/servicos", data=SERVICO)
+        return self.sql("SELECT id FROM servicos")[0]["id"]
+
+    def test_registra_como_resolver(self):
+        sid = self.novo_servico()
+        r = self.c.post(f"/veiculos/{self.vid}/servicos/{sid}/resolucao",
+                        data={"como_resolver": "Desamassar e pintar a coluna"})
+        self.assertEqual(r.status_code, 302)
+        linha = self.sql("SELECT como_resolver, resolvido_por FROM servicos")[0]
+        self.assertEqual(linha["como_resolver"], "Desamassar e pintar a coluna")
+        self.assertEqual(linha["resolvido_por"], "PESSOA TESTE")
+        self.assertIn(b"Desamassar e pintar", self.c.get(f"/veiculos/{self.vid}").data)
+
+    def test_pode_editar_como_resolver(self):
+        sid = self.novo_servico()
+        url = f"/veiculos/{self.vid}/servicos/{sid}/resolucao"
+        self.c.post(url, data={"como_resolver": "Primeira ideia"})
+        self.c.post(url, data={"como_resolver": "Troca da peça"})
+        self.assertEqual(self.sql("SELECT como_resolver FROM servicos")[0]["como_resolver"], "Troca da peça")
+
+    def test_como_resolver_nao_aceita_vazio(self):
+        sid = self.novo_servico()
+        r = self.c.post(f"/veiculos/{self.vid}/servicos/{sid}/resolucao", data={"como_resolver": "  "})
+        self.assertIn("Descreva como o problema será resolvido.".encode(), r.data)
+        self.assertIsNone(self.sql("SELECT como_resolver FROM servicos")[0]["como_resolver"])
+
+    def test_como_resolver_nao_aceita_texto_enorme(self):
+        sid = self.novo_servico()
+        self.c.post(f"/veiculos/{self.vid}/servicos/{sid}/resolucao", data={"como_resolver": "a" * 501})
+        self.assertIsNone(self.sql("SELECT como_resolver FROM servicos")[0]["como_resolver"])
+
+    def test_como_resolver_de_servico_de_outro_veiculo_da_404(self):
+        sid = self.novo_servico()
+        self.c.post("/veiculos", data={**VEICULO, "placa": "XYZ9K88"})
+        outro = self.sql("SELECT id FROM veiculos WHERE placa = 'XYZ9K88'")[0]["id"]
+        r = self.c.post(f"/veiculos/{outro}/servicos/{sid}/resolucao", data={"como_resolver": "Teste aqui"})
+        self.assertEqual(r.status_code, 404)
+
+    def test_html_em_como_resolver_nao_vira_codigo(self):
+        sid = self.novo_servico()
+        self.c.post(f"/veiculos/{self.vid}/servicos/{sid}/resolucao",
+                    data={"como_resolver": "<script>alert(1)</script> teste"})
+        self.assertNotIn(b"<script>alert(1)</script>", self.c.get(f"/veiculos/{self.vid}").data)
+
     def test_funcionario_nao_exclui(self):
         self.c.post(f"/veiculos/{self.vid}/servicos", data=SERVICO)
         sid = self.sql("SELECT id FROM servicos")[0]["id"]
