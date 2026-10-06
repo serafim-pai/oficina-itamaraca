@@ -372,6 +372,15 @@ def travar_veiculo_entregue():
     return None
 
 
+@app.after_request
+def cabecalhos_de_seguranca(resposta):
+    """Pedem ao navegador para se proteger (tela dentro de outro site, tipo de arquivo trocado)."""
+    resposta.headers.setdefault("X-Frame-Options", "DENY")
+    resposta.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resposta.headers.setdefault("Referrer-Policy", "same-origin")
+    return resposta
+
+
 @app.context_processor
 def dados_para_as_telas():
     return {"usuario": g.get("usuario")}
