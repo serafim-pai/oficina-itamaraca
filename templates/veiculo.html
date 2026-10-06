@@ -18,15 +18,65 @@
         <strong>Veículo:</strong> {{ veiculo['marca'] or '-' }} {{ veiculo['modelo'] }} {{ veiculo['cor'] }} {{ veiculo['ano'] }}<br>
         <strong>Km:</strong> {{ veiculo['quilometragem'] or '-' }}
     </p>
-    {% if fotos %}
-    <div class="fotos">
-        {% for foto_id in fotos %}
-        <a href="{{ url_for('foto', id=foto_id) }}" target="_blank" rel="noopener">
-            <img src="{{ url_for('foto_miniatura', id=foto_id) }}" alt="Foto do veículo {{ veiculo['placa'] }}" loading="lazy">
-        </a>
-        {% endfor %}
+    <div class="fotos-veiculo">
+        {% if fotos %}
+        <div class="galeria">
+            {% for foto_id in fotos %}
+            <div class="foto-card">
+                <a href="{{ url_for('foto', id=foto_id) }}" target="_blank" rel="noopener">
+                    <img src="{{ url_for('foto_miniatura', id=foto_id) }}" alt="Foto do veículo {{ veiculo['placa'] }}" loading="lazy">
+                </a>
+                {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
+                <form method="POST" action="{{ url_for('trocar_foto', id=veiculo['id'], foto_id=foto_id) }}"
+                      enctype="multipart/form-data" class="trocar-foto">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="botao-pequeno">Trocar
+                        <input type="file" name="foto" accept="image/*"
+                               onchange="if (confirm('Trocar esta foto pela que você escolheu? A atual será apagada.')) { this.form.submit(); } else { this.value = ''; }">
+                    </label>
+                </form>
+                <form method="POST" action="{{ url_for('excluir_foto', id=veiculo['id'], foto_id=foto_id) }}"
+                      onsubmit="return confirm('Excluir esta foto? Isso não pode ser desfeito.')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="botao-pequeno perigo">Excluir</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if not entrega %}
+        <details class="adicionar-fotos" {{ 'open' if not fotos }}>
+            <summary>➕ Adicionar fotos</summary>
+            <form method="POST" action="{{ url_for('adicionar_fotos', id=veiculo['id']) }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="file" name="fotos" accept="image/*" multiple aria-label="Fotos para adicionar">
+                <span class="aviso">Até {{ max_fotos }} fotos por vez e {{ max_fotos_veiculo }} por veículo, de {{ max_mb }} MB cada
+                    (JPG, PNG, WEBP ou GIF).{% if usuario and usuario['tipo'] == 'DONO' %} Para trocar ou excluir uma foto, use os botões embaixo dela.{% endif %}</span>
+                <button type="submit">Enviar fotos</button>
+            </form>
+        </details>
+        {% endif %}
+
+        {% if usuario and usuario['tipo'] == 'DONO' and historico_fotos %}
+        <details class="historico-fotos">
+            <summary>Histórico das fotos ({{ historico_fotos|length }})</summary>
+            <div class="tabela-rolavel">
+            <table>
+                <tr><th>Quando</th><th>O que foi feito</th><th>Por</th></tr>
+                {% for h in historico_fotos %}
+                <tr>
+                    <td>{{ h['feita_em']|hora_brasil }}</td>
+                    <td>{{ {'ADICIONADA': 'Foto adicionada', 'TROCADA': 'Foto trocada', 'EXCLUIDA': 'Foto excluída'}.get(h['acao'], h['acao']) }}</td>
+                    <td>{{ h['feita_por'] }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            </div>
+        </details>
+        {% endif %}
     </div>
-    {% endif %}
 
     {% if erros %}
     <div class="erros">

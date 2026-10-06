@@ -102,6 +102,24 @@ td.fotos img { width: 48px; height: 48px; }
 .fotos a:hover img { border-color: #1a3c6e; }
 input[type="file"] { padding: 6px 0; }
 
+/* Fotos de um veículo: galeria com trocar e excluir */
+.fotos-veiculo { margin: 14px 0; }
+.galeria { display: flex; flex-wrap: wrap; gap: 12px; }
+.foto-card { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 104px; }
+.foto-card img { width: 100px; height: 100px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; }
+.foto-card a:hover img { border-color: #1a3c6e; }
+.foto-card form { display: block; width: 100%; }
+.botao-pequeno { display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 5px 8px; font-size: 12px;
+                 text-align: center; background-color: #1a3c6e; color: white; border: none; border-radius: 4px; cursor: pointer; }
+.botao-pequeno:hover { background-color: #14305a; }
+.botao-pequeno.perigo { background-color: #8a1c1c; }
+.botao-pequeno.perigo:hover { background-color: #6e1616; }
+label.botao-pequeno { font-weight: bold; }
+label.botao-pequeno input[type="file"] { display: none; }
+.fotos-veiculo details { margin-top: 12px; }
+.fotos-veiculo summary { cursor: pointer; font-weight: bold; }
+.adicionar-fotos form { gap: 8px; }
+
 /* Tela de usuários */
 td.acoes form { display: inline; }
 td.acoes button { margin: 0; padding: 4px 10px; }

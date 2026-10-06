@@ -9,6 +9,11 @@ Sistema de oficina mecânica (projeto de prática). Histórias de usuário em [H
   - O sistema confere o **conteúdo** do arquivo (não o nome), reduz a foto para no máximo 1600 px, endireita fotos de celular e **remove os dados escondidos**, como a localização GPS.
   - Se qualquer foto for recusada, **nada** é cadastrado (nem o veículo, nem as outras fotos).
   - As fotos ficam na pasta `fotos/` (fora do GitHub e fora da pasta pública) e só aparecem para quem entrou no sistema.
+- **Adicionar, trocar e excluir fotos** na tela do veículo, depois do cadastro:
+  - **Adicionar** (dono e funcionário): até 10 fotos por vez e 20 por veículo, com o mesmo tratamento das fotos do cadastro (confere o conteúdo, reduz, tira o GPS). Tudo ou nada: se uma foto for recusada, nenhuma é guardada.
+  - **Trocar** e **excluir** (só o dono, com confirmação), porque as fotos servem de prova do estado do carro. A foto trocada ocupa o mesmo lugar; a antiga é apagada do disco só depois que a nova está salva. Se algo falhar no meio, nada se perde.
+  - O dono vê o **histórico das fotos** (quem adicionou, trocou ou excluiu, e quando, no horário de Brasília). A imagem apagada não é guardada.
+  - Depois da **entrega**, as fotos ficam travadas como o resto do cadastro (voltam a poder mudar se a entrega for desfeita).
 
 - **Problemas e tipos de serviço** (história 3): clique na placa na lista para abrir a página do veículo e registrar cada problema com o tipo de serviço (lataria, pintura, mecânica, elétrica, suspensão, freios, polimento e estética ou outro). Fica guardado quem registrou e quando; só o dono exclui.
 - **Como resolver** (história 4): para cada problema, anote como ele será resolvido (dá para editar depois; fica guardado quem escreveu).

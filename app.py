@@ -57,8 +57,10 @@ CONDICOES_PADRAO = (
 )
 # Depois que o veículo é entregue, estas ações (envios de formulário) ficam bloqueadas.
 TRAVADOS_APOS_ENTREGA = {"registrar_servico", "registrar_resolucao", "registrar_valor", "excluir_servico",
-                         "registrar_aprovacao", "registrar_prazo", "registrar_garantia", "fechar_entrega"}
-MAX_FOTOS = 10                       # fotos por cadastro
+                         "registrar_aprovacao", "registrar_prazo", "registrar_garantia", "fechar_entrega",
+                         "adicionar_fotos", "excluir_foto", "trocar_foto"}
+MAX_FOTOS = 10                       # fotos por envio (no cadastro ou ao adicionar depois)
+MAX_FOTOS_VEICULO = 20               # fotos de um veículo, no total
 MAX_BYTES_FOTO = 8 * 1024 * 1024     # tamanho máximo de cada foto enviada
 MAX_PIXELS_FOTO = 40_000_000         # evita imagens "bomba" que travariam o servidor
 LADO_FOTO = 1600                     # a foto guardada é reduzida para caber nesse tamanho
@@ -140,6 +142,20 @@ def init_db():
             veiculo_id INTEGER NOT NULL,
             arquivo TEXT NOT NULL,
             criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    # Registro do que foi feito com as fotos depois do cadastro (adicionar, trocar, excluir): quem e quando.
+    # A imagem apagada NÃO é guardada; fica só o registro de que aconteceu.
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS fotos_historico (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            veiculo_id INTEGER NOT NULL,
+            foto_id INTEGER NOT NULL,
+            acao TEXT NOT NULL,
+            feita_por TEXT,
+            feita_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
         """
     )
@@ -737,17 +753,40 @@ def preparar_foto(arquivo):
     return None, tuple(saidas)
 
 
-def guardar_fotos(db, veiculo_id, fotos, criados):
-    """Grava os arquivos das fotos e registra no banco.
+def gravar_arquivos_da_foto(grande, miniatura, criados):
+    """Grava a foto grande e a miniatura no disco e devolve o código sorteado que identifica o par.
     Cada arquivo é anotado em 'criados' assim que nasce, para dar para apagar tudo se algo falhar no meio."""
+    codigo = secrets.token_hex(16)     # nome sorteado: o nome original nunca vira caminho
+    for sufixo, conteudo in (("", grande), ("_m", miniatura)):
+        caminho = os.path.join(PASTA_FOTOS, f"{codigo}{sufixo}.jpg")
+        criados.append(caminho)
+        with open(caminho, "wb") as f:
+            f.write(conteudo)
+    return codigo
+
+
+def apagar_arquivos(caminhos):
+    for caminho in caminhos:
+        try:
+            os.remove(caminho)
+        except FileNotFoundError:
+            pass
+
+
+def apagar_arquivos_da_foto(codigo):
+    apagar_arquivos([os.path.join(PASTA_FOTOS, f"{codigo}{sufixo}.jpg") for sufixo in ("", "_m")])
+
+
+def guardar_fotos(db, veiculo_id, fotos, criados):
+    """Grava os arquivos das fotos e registra no banco."""
     for grande, miniatura in fotos:
-        codigo = secrets.token_hex(16)     # nome sorteado: o nome original nunca vira caminho
-        for sufixo, conteudo in (("", grande), ("_m", miniatura)):
-            caminho = os.path.join(PASTA_FOTOS, f"{codigo}{sufixo}.jpg")
-            criados.append(caminho)
-            with open(caminho, "wb") as f:
-                f.write(conteudo)
+        codigo = gravar_arquivos_da_foto(grande, miniatura, criados)
         db.execute("INSERT INTO fotos (veiculo_id, arquivo) VALUES (?, ?)", (veiculo_id, codigo))
+
+
+def anotar_foto(db, veiculo_id, foto_id, acao):
+    db.execute("INSERT INTO fotos_historico (veiculo_id, foto_id, acao, feita_por) VALUES (?, ?, ?, ?)",
+               (veiculo_id, foto_id, acao, g.usuario["nome"]))
 
 
 def enviar_foto(id, sufixo):
@@ -755,7 +794,9 @@ def enviar_foto(id, sufixo):
     if not linha:
         abort(404)
     resposta = send_from_directory(PASTA_FOTOS, f"{linha['arquivo']}{sufixo}.jpg", mimetype="image/jpeg")
-    resposta.headers["Cache-Control"] = "private, max-age=86400"    # só o navegador de quem entrou guarda
+    # Só o navegador de quem entrou guarda, mas sempre confere se a foto mudou (uma foto trocada
+    # continua com o mesmo endereço, e não pode aparecer a antiga). A conferência é barata (304).
+    resposta.headers["Cache-Control"] = "private, no-cache"
     resposta.headers["X-Content-Type-Options"] = "nosniff"
     return resposta
 
@@ -768,6 +809,99 @@ def foto(id):
 @app.route("/fotos/<int:id>/miniatura")
 def foto_miniatura(id):
     return enviar_foto(id, "_m")
+
+
+@app.route("/veiculos/<int:id>/fotos", methods=["POST"])
+def adicionar_fotos(id):
+    """Acrescenta fotos a um veículo já cadastrado. Dono e funcionário podem. Tudo ou nada: se uma
+    foto for recusada, nenhuma é guardada."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    arquivos = [a for a in request.files.getlist("fotos") if a and a.filename]
+    existentes = db.execute("SELECT COUNT(*) FROM fotos WHERE veiculo_id = ?", (id,)).fetchone()[0]
+    erros, preparadas = [], []
+    if not arquivos:
+        erros.append("Escolha pelo menos uma foto para adicionar.")
+    elif len(arquivos) > MAX_FOTOS:
+        erros.append(f"Envie no máximo {MAX_FOTOS} fotos de uma vez.")
+    elif existentes + len(arquivos) > MAX_FOTOS_VEICULO:
+        erros.append(f"Cada veículo pode ter no máximo {MAX_FOTOS_VEICULO} fotos (este já tem {existentes}).")
+    else:
+        for arquivo in arquivos:
+            erro_foto, pronta = preparar_foto(arquivo)
+            if erro_foto:
+                erros.append(erro_foto)
+            else:
+                preparadas.append(pronta)
+    if erros:
+        return pagina_veiculo(id, erros)
+
+    criados = []
+    try:
+        guardar_fotos(db, id, preparadas, criados)
+        novas = db.execute("SELECT id FROM fotos WHERE veiculo_id = ? ORDER BY id DESC LIMIT ?",
+                           (id, len(preparadas))).fetchall()
+        for nova in novas:
+            anotar_foto(db, id, nova["id"], "ADICIONADA")
+        db.commit()
+    except Exception:
+        db.rollback()
+        apagar_arquivos(criados)      # não deixa foto "órfã" no disco
+        raise
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+def buscar_foto_do_veiculo(db, id, foto_id):
+    """A foto, desde que seja mesmo deste veículo (senão 404)."""
+    foto_do_veiculo = db.execute("SELECT * FROM fotos WHERE id = ? AND veiculo_id = ?", (foto_id, id)).fetchone()
+    if not foto_do_veiculo:
+        abort(404)
+    return foto_do_veiculo
+
+
+@app.route("/veiculos/<int:id>/fotos/<int:foto_id>/excluir", methods=["POST"])
+def excluir_foto(id, foto_id):
+    """Só o dono apaga uma foto (elas servem de prova do estado do carro). Fica o registro de quem e quando."""
+    so_dono()
+    db = get_db()
+    buscar_veiculo(db, id)
+    foto_do_veiculo = buscar_foto_do_veiculo(db, id, foto_id)
+    db.execute("DELETE FROM fotos WHERE id = ?", (foto_id,))
+    anotar_foto(db, id, foto_id, "EXCLUIDA")
+    db.commit()
+    apagar_arquivos_da_foto(foto_do_veiculo["arquivo"])      # só depois de gravar no banco
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/fotos/<int:foto_id>/trocar", methods=["POST"])
+def trocar_foto(id, foto_id):
+    """Só o dono troca uma foto por outra. A foto nova ocupa o mesmo lugar (mesmo número); a antiga é apagada.
+    Se algo falhar, a antiga continua intacta."""
+    so_dono()
+    db = get_db()
+    buscar_veiculo(db, id)
+    foto_do_veiculo = buscar_foto_do_veiculo(db, id, foto_id)
+    arquivos = [a for a in request.files.getlist("foto") if a and a.filename]
+    if not arquivos:
+        return pagina_veiculo(id, ["Escolha a foto que vai ficar no lugar da atual."])
+    if len(arquivos) > 1:
+        return pagina_veiculo(id, ["Para trocar, envie uma foto só."])
+    erro_foto, pronta = preparar_foto(arquivos[0])
+    if erro_foto:
+        return pagina_veiculo(id, [erro_foto])
+
+    criados = []
+    try:
+        codigo = gravar_arquivos_da_foto(pronta[0], pronta[1], criados)
+        db.execute("UPDATE fotos SET arquivo = ?, criado_em = CURRENT_TIMESTAMP WHERE id = ?", (codigo, foto_id))
+        anotar_foto(db, id, foto_id, "TROCADA")
+        db.commit()
+    except Exception:
+        db.rollback()
+        apagar_arquivos(criados)
+        raise
+    apagar_arquivos_da_foto(foto_do_veiculo["arquivo"])      # a antiga só some depois que a nova está salva
+    return redirect(url_for("ver_veiculo", id=id))
 
 
 @app.route("/veiculos", methods=["POST"])
@@ -872,7 +1006,10 @@ def pagina_veiculo(id, erros=None, dados=None):
                  for i in db.execute("SELECT * FROM entrega_itens WHERE entrega_id = ? ORDER BY id", (entrega["id"],))]
     sem_garantia_informada = sum(1 for s in servicos if s["garantia_valor"] is None)
     desfeitas = db.execute("SELECT * FROM entregas_desfeitas WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
+    historico_fotos = db.execute("SELECT * FROM fotos_historico WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
     return render_template("veiculo.html", veiculo=veiculo, servicos=servicos, fotos=fotos,
+                           historico_fotos=historico_fotos, max_fotos=MAX_FOTOS, max_fotos_veiculo=MAX_FOTOS_VEICULO,
+                           max_mb=MAX_BYTES_FOTO // (1024 * 1024),
                            desfeitas=desfeitas, max_motivo_desfazer=MAX_MOTIVO_DESFAZER,
                            limites=limites_de_garantia(db), texto_limite=texto_limite,
                            entrega=entrega, itens=itens, sem_garantia_informada=sem_garantia_informada,
