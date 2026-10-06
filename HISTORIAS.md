@@ -63,7 +63,7 @@ orçamento, para só começar o serviço depois da aprovação e ter como
 comprovar o que o cliente decidiu.
 
 Critérios de aceitação (escritos pelo Claude a partir do título do mapa;
-o dono deve revisar):
+revisados e confirmados pelo dono em 06/10/2026):
 - Só dá para registrar a decisão do cliente quando o orçamento está
   completo (todos os serviços com valor).
 - A decisão é "aprovado" ou "recusado", com a forma como o cliente
@@ -86,7 +86,7 @@ cliente saber quando vai receber o carro e para a oficina acompanhar os
 atrasos.
 
 Critérios de aceitação (escritos pelo Claude a partir do título do mapa;
-o dono deve revisar):
+revisados e confirmados pelo dono em 06/10/2026):
 - Só o dono define ou muda o prazo. O funcionário apenas vê.
 - O prazo só pode ser definido depois que o cliente aprovou o orçamento
   (aprovação valendo, ver história 6).
