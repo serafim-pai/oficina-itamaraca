@@ -6,6 +6,7 @@ import secrets
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
+from urllib.parse import quote
 
 from flask import (Flask, Response, abort, g, redirect, render_template, request,
                    send_from_directory, session, url_for)
@@ -328,6 +329,10 @@ def init_db():
         db.execute("ALTER TABLE servicos ADD COLUMN garantia_valor INTEGER")
     if "garantia_unidade" not in colunas:
         db.execute("ALTER TABLE servicos ADD COLUMN garantia_unidade TEXT")
+    # Telefone (WhatsApp) do cliente, só dígitos com DDD; opcional
+    colunas_veiculos = [c[1] for c in db.execute("PRAGMA table_info(veiculos)")]
+    if "telefone" not in colunas_veiculos:
+        db.execute("ALTER TABLE veiculos ADD COLUMN telefone TEXT")
     # Fotos da entrega: "momento" diz quando a foto foi tirada. ENTRADA (as que já existiam), ENTREGA, ou
     # ENTREGA_DESFEITA (as da entrega que depois foi desfeita; ficam guardadas, ligadas a ela).
     colunas_fotos = [c[1] for c in db.execute("PRAGMA table_info(fotos)")]
@@ -960,6 +965,53 @@ def trocar_foto(id, foto_id):
     return redirect(url_for("ver_veiculo", id=id))
 
 
+def normalizar_telefone(texto):
+    """Aceita "(11) 98765-4321", "11987654321", "+55 11 98765-4321" etc.
+    Devolve (telefone_só_com_dígitos_e_DDD, None), ("", None) se vier vazio, ou (None, mensagem de erro)."""
+    digitos = "".join(c for c in texto if c.isdigit())
+    if not digitos:
+        return "", None
+    if len(digitos) in (12, 13) and digitos.startswith("55"):
+        digitos = digitos[2:]
+    if len(digitos) not in (10, 11) or digitos[0] == "0":
+        return None, "Telefone inválido: informe o DDD e o número (exemplo: (81) 98765-4321)."
+    return digitos, None
+
+
+def formatar_telefone(digitos):
+    if not digitos:
+        return "-"
+    if len(digitos) == 11:
+        return f"({digitos[:2]}) {digitos[2:7]}-{digitos[7:]}"
+    return f"({digitos[:2]}) {digitos[2:6]}-{digitos[6:]}"
+
+
+MAX_LINK_WHATSAPP = 1800     # tamanho máximo do texto já codificado no link (os links muito longos falham)
+
+
+def link_whatsapp(veiculo, servicos, total_centavos):
+    """Link que abre o WhatsApp com o orçamento já escrito. Sem telefone, o WhatsApp pede para escolher o contato.
+    Quem envia é a pessoa, tocando em "enviar" no WhatsApp: o sistema não manda nada sozinho."""
+    nome = (veiculo["responsavel"] or "").strip()
+    carro = " ".join(p for p in (veiculo["marca"], veiculo["modelo"], veiculo["cor"]) if p)
+    abertura = f"Olá{', ' + nome if nome else ''}! Aqui é da Oficina Itamaracá.\n"
+    abertura += f"Segue o orçamento do veículo {carro + ' ' if carro else ''}placa {veiculo['placa']}:\n"
+    fim = (f"\n*Total: {formatar_dinheiro(total_centavos)}*\n\n"
+           "Você aprova o orçamento? Responda *APROVADO* ou *RECUSADO*.")
+    linhas = [f"• {s['tipo'].capitalize()}: {' '.join(s['problema'].split())[:100]} - "
+              f"{formatar_dinheiro(s['valor_centavos'])}" for s in servicos]
+    incluidas = list(linhas)
+    while True:
+        mais = len(linhas) - len(incluidas)
+        corpo = "\n".join(incluidas) + (f"\n... e mais {mais} serviço{'s' if mais != 1 else ''}" if mais else "")
+        texto = abertura + corpo + "\n" + fim
+        if len(quote(texto)) <= MAX_LINK_WHATSAPP or not incluidas:
+            break
+        incluidas.pop()
+    base = f"https://wa.me/55{veiculo['telefone']}" if veiculo["telefone"] else "https://wa.me/"
+    return f"{base}?text={quote(texto)}"
+
+
 @app.route("/veiculos", methods=["POST"])
 def cadastrar_veiculo():
     dados = {
@@ -971,9 +1023,13 @@ def cadastrar_veiculo():
         "ano": request.form.get("ano", "").strip(),
         "quilometragem": request.form.get("quilometragem", "").strip(),
     }
+    telefone, erro_telefone = normalizar_telefone(request.form.get("telefone", ""))
+    dados["telefone"] = request.form.get("telefone", "").strip()
     documento_deixado = request.form.get("documento_deixado") == "on"
 
     erros = []
+    if erro_telefone:
+        erros.append(erro_telefone)
     if not dados["placa"]:
         erros.append("A placa é obrigatória.")
     if not documento_deixado:
@@ -1006,8 +1062,8 @@ def cadastrar_veiculo():
         cursor = db.execute(
             """
             INSERT INTO veiculos
-                (responsavel, placa, marca, modelo, cor, ano, quilometragem, documento_deixado)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (responsavel, placa, marca, modelo, cor, ano, quilometragem, documento_deixado, telefone)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 dados["responsavel"],
@@ -1018,6 +1074,7 @@ def cadastrar_veiculo():
                 dados["ano"],
                 dados["quilometragem"],
                 1,
+                telefone,
             ),
         )
         guardar_fotos(db, cursor.lastrowid, preparadas, criados)
@@ -1072,7 +1129,9 @@ def pagina_veiculo(id, erros=None, dados=None):
                            historico_fotos=historico_fotos, max_fotos=MAX_FOTOS, max_fotos_veiculo=MAX_FOTOS_VEICULO,
                            max_mb=MAX_BYTES_FOTO // (1024 * 1024),
                            desfeitas=desfeitas, max_motivo_desfazer=MAX_MOTIVO_DESFAZER,
-                           max_motivo_excluir=MAX_MOTIVO_EXCLUIR,
+                           max_motivo_excluir=MAX_MOTIVO_EXCLUIR, formatar_telefone=formatar_telefone,
+                           link_whatsapp=(link_whatsapp(veiculo, servicos, total_centavos)
+                                          if orcamento_completo and not entrega else None),
                            limites=limites_de_garantia(db), texto_limite=texto_limite,
                            entrega=entrega, itens=itens, sem_garantia_informada=sem_garantia_informada,
                            unidades_garantia=UNIDADES_GARANTIA, texto_garantia=texto_garantia,
@@ -1468,6 +1527,19 @@ def comprovante(id):
                            fotos_entrega=fotos_entrega,
                            formatar_data=formatar_data, formatar_dinheiro=formatar_dinheiro,
                            texto_garantia=texto_garantia, nomes_formas=NOMES_FORMAS_APROVACAO)
+
+
+@app.route("/veiculos/<int:id>/telefone", methods=["POST"])
+def registrar_telefone(id):
+    """Dono e funcionário informam ou corrigem o telefone (WhatsApp) do cliente. Pode ficar vazio."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    telefone, erro = normalizar_telefone(request.form.get("telefone", ""))
+    if erro:
+        return pagina_veiculo(id, [erro])
+    db.execute("UPDATE veiculos SET telefone = ? WHERE id = ?", (telefone, id))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
 
 
 @app.route("/veiculos/<int:id>/excluir", methods=["POST"])

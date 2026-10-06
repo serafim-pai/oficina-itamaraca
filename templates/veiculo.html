@@ -16,8 +16,19 @@
     <p>
         <strong>Responsável:</strong> {{ veiculo['responsavel'] or '-' }}<br>
         <strong>Veículo:</strong> {{ veiculo['marca'] or '-' }} {{ veiculo['modelo'] }} {{ veiculo['cor'] }} {{ veiculo['ano'] }}<br>
-        <strong>Km:</strong> {{ veiculo['quilometragem'] or '-' }}
+        <strong>Km:</strong> {{ veiculo['quilometragem'] or '-' }}<br>
+        <strong>WhatsApp:</strong> {{ formatar_telefone(veiculo['telefone']) }}
     </p>
+    <details class="telefone-cliente">
+        <summary>{{ 'Alterar' if veiculo['telefone'] else 'Informar' }} o WhatsApp do cliente</summary>
+        <form method="POST" action="{{ url_for('registrar_telefone', id=veiculo['id']) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="telefone">WhatsApp do cliente (com DDD; deixe vazio para apagar)</label>
+            <input type="tel" id="telefone" name="telefone" inputmode="tel" placeholder="(81) 98765-4321"
+                   value="{{ formatar_telefone(veiculo['telefone']) if veiculo['telefone'] else '' }}">
+            <button type="submit">Salvar</button>
+        </form>
+    </details>
     <div class="fotos-veiculo">
         {% if fotos %}
         {% if entrega %}<h3>Fotos da entrada do veículo (como o carro chegou)</h3>{% endif %}
@@ -191,6 +202,12 @@
         <h2>Orçamento</h2>
         {% if orcamento_completo %}
         <p><strong>Valor total do orçamento: {{ formatar_dinheiro(total_centavos) }}</strong></p>
+        {% if link_whatsapp %}
+        <p><a class="botao botao-whatsapp" href="{{ link_whatsapp }}" target="_blank" rel="noopener">📲 Enviar orçamento pelo WhatsApp</a></p>
+        <p class="aviso">Abre o WhatsApp com o orçamento já escrito; você confere e toca em enviar.
+            {% if not veiculo['telefone'] %}Sem o número do cliente cadastrado, o WhatsApp pede para escolher o contato.{% endif %}
+            Quando o cliente responder, registre a decisão dele em "Aprovação do cliente", mais abaixo.</p>
+        {% endif %}
         {% else %}
         <p>Orçamento incompleto: falta informar o valor de {{ faltam_valor }} serviço{{ 's' if faltam_valor != 1 else '' }}.</p>
         {% if total_centavos %}

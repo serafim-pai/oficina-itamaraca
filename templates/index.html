@@ -55,6 +55,10 @@
         <label for="quilometragem">Quilometragem</label>
         <input type="text" id="quilometragem" name="quilometragem" value="{{ dados.get('quilometragem', '') }}">
 
+        <label for="telefone">WhatsApp do cliente (opcional)</label>
+        <input type="tel" id="telefone" name="telefone" inputmode="tel" placeholder="(81) 98765-4321" value="{{ dados.get('telefone', '') }}">
+        <span class="aviso">Com DDD. Serve para enviar o orçamento pelo WhatsApp.</span>
+
         <label for="fotos">Fotos do veículo (opcional)</label>
         <input type="file" id="fotos" name="fotos" accept="image/*" multiple>
         <span class="aviso">Até {{ max_fotos }} fotos de {{ max_mb }} MB cada (JPG, PNG, WEBP ou GIF). Dá para tirar pela câmera do celular.</span>
