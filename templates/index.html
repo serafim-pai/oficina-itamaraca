@@ -17,6 +17,10 @@
     </div>
     {% endif %}
 
+    {% if excluido %}
+    <div class="ok">Veículo <strong>{{ excluido }}</strong> excluído.</div>
+    {% endif %}
+
     {% if erros %}
     <div class="erros">
         <ul>

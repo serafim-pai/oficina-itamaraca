@@ -44,6 +44,7 @@ UNIDADES_GARANTIA = ("DIAS", "MESES")                          # história 8
 LIMITES_PADRAO_MESES = {"LATARIA": 12, "PINTURA": 24, "MECÂNICA": 6, "ELÉTRICA": 6, "SUSPENSÃO": 12,
                         "FREIOS": 6, "POLIMENTO E ESTÉTICA": 3, "OUTRO": 12}
 MAX_LIMITE_MESES = 120                                         # o dono pode ajustar cada limite de 1 a 120 meses
+MAX_MOTIVO_EXCLUIR = 300                                        # letras do motivo de excluir um veículo
 MAX_MOTIVO_DESFAZER = 300                                      # letras do motivo de desfazer uma entrega
 MAX_CONDICOES = 1500                                           # letras das condições que cancelam a garantia
 # Texto sugerido no fechamento da entrega (o dono pode editar antes de fechar).
@@ -273,6 +274,21 @@ def init_db():
             garantia_valor INTEGER NOT NULL,
             garantia_unidade TEXT NOT NULL,
             garantia_ate TEXT
+        )
+        """
+    )
+    # Veículos excluídos: o veículo e tudo que era dele somem, mas fica o registro de que existiu,
+    # quem excluiu, quando e por quê.
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS veiculos_excluidos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            veiculo_id INTEGER NOT NULL,
+            placa TEXT,
+            responsavel TEXT,
+            motivo TEXT NOT NULL,
+            excluido_por TEXT,
+            excluido_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
         """
     )
@@ -704,6 +720,7 @@ def pagina_inicial(erros=None, dados=None):
     """Desenha a tela de cadastro com a lista de veículos e as fotos de cada um."""
     db = get_db()
     cadastrado = None
+    excluido = request.args.get("excluido", "")[:20] if request.method == "GET" else ""
     if request.method == "GET" and request.args.get("cadastrado", "").isdigit():
         cadastrado = db.execute("SELECT id, placa FROM veiculos WHERE id = ?",
                                 (int(request.args["cadastrado"]),)).fetchone()
@@ -712,7 +729,7 @@ def pagina_inicial(erros=None, dados=None):
     for foto in db.execute("SELECT id, veiculo_id FROM fotos WHERE momento = 'ENTRADA' ORDER BY id"):
         fotos.setdefault(foto["veiculo_id"], []).append(foto["id"])
     return render_template("index.html", veiculos=veiculos, fotos=fotos, erros=erros or [],
-                           dados=dados or {}, cadastrado=cadastrado, max_fotos=MAX_FOTOS,
+                           dados=dados or {}, cadastrado=cadastrado, excluido=excluido, max_fotos=MAX_FOTOS,
                            max_mb=MAX_BYTES_FOTO // (1024 * 1024),
                            situacoes=situacoes_dos_veiculos(db, veiculos),
                            prazos=prazos_dos_veiculos(db, veiculos))
@@ -1055,6 +1072,7 @@ def pagina_veiculo(id, erros=None, dados=None):
                            historico_fotos=historico_fotos, max_fotos=MAX_FOTOS, max_fotos_veiculo=MAX_FOTOS_VEICULO,
                            max_mb=MAX_BYTES_FOTO // (1024 * 1024),
                            desfeitas=desfeitas, max_motivo_desfazer=MAX_MOTIVO_DESFAZER,
+                           max_motivo_excluir=MAX_MOTIVO_EXCLUIR,
                            limites=limites_de_garantia(db), texto_limite=texto_limite,
                            entrega=entrega, itens=itens, sem_garantia_informada=sem_garantia_informada,
                            unidades_garantia=UNIDADES_GARANTIA, texto_garantia=texto_garantia,
@@ -1450,6 +1468,49 @@ def comprovante(id):
                            fotos_entrega=fotos_entrega,
                            formatar_data=formatar_data, formatar_dinheiro=formatar_dinheiro,
                            texto_garantia=texto_garantia, nomes_formas=NOMES_FORMAS_APROVACAO)
+
+
+@app.route("/veiculos/<int:id>/excluir", methods=["POST"])
+def excluir_veiculo(id):
+    """Só o dono exclui um veículo cadastrado por engano ou de teste. O motivo é obrigatório.
+    Some o veículo e tudo que era dele (serviços, aprovações, prazos, fotos e os arquivos das fotos);
+    fica só o registro de que existiu, quem excluiu, quando e por quê.
+    Não exclui veículo com entrega fechada nem com entregas desfeitas: ali há comprovante e prova
+    do que foi combinado, e isso não se apaga."""
+    so_dono()
+    db = get_db()
+    veiculo = buscar_veiculo(db, id)
+    motivo = " ".join(request.form.get("motivo", "").split())
+
+    erros = []
+    if db.execute("SELECT 1 FROM entregas WHERE veiculo_id = ?", (id,)).fetchone():
+        erros.append("Este veículo tem a entrega fechada e não pode ser excluído. "
+                     "Se foi engano, desfaça a entrega primeiro.")
+    elif db.execute("SELECT 1 FROM entregas_desfeitas WHERE veiculo_id = ?", (id,)).fetchone():
+        erros.append("Este veículo já teve uma entrega (depois desfeita) e não pode ser excluído, "
+                     "porque o histórico da entrega precisa ser guardado.")
+    if sum(1 for letra in motivo if letra.isalpha()) < 3:
+        erros.append("Explique o motivo de excluir o veículo.")
+    elif len(motivo) > MAX_MOTIVO_EXCLUIR:
+        erros.append(f"O motivo pode ter no máximo {MAX_MOTIVO_EXCLUIR} letras.")
+    if erros:
+        return pagina_veiculo(id, erros)
+
+    codigos = [f["arquivo"] for f in db.execute("SELECT arquivo FROM fotos WHERE veiculo_id = ?", (id,))]
+    try:
+        db.execute("INSERT INTO veiculos_excluidos (veiculo_id, placa, responsavel, motivo, excluido_por) "
+                   "VALUES (?, ?, ?, ?, ?)",
+                   (id, veiculo["placa"], veiculo["responsavel"], motivo, g.usuario["nome"]))
+        for tabela in ("fotos", "fotos_historico", "servicos", "aprovacoes", "prazos"):
+            db.execute(f"DELETE FROM {tabela} WHERE veiculo_id = ?", (id,))
+        db.execute("DELETE FROM veiculos WHERE id = ?", (id,))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    for codigo in codigos:           # os arquivos só somem depois de gravar no banco
+        apagar_arquivos_da_foto(codigo)
+    return redirect(url_for("index", excluido=veiculo["placa"]))
 
 
 @app.route("/veiculos/<int:id>/servicos/<int:servico_id>/excluir", methods=["POST"])

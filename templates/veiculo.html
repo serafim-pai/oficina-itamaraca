@@ -435,6 +435,21 @@
     <p>Nenhum problema registrado ainda.</p>
     {% endif %}
 
+    {% if usuario and usuario['tipo'] == 'DONO' and not entrega and not desfeitas %}
+    <details class="excluir-veiculo">
+        <summary>Excluir este veículo</summary>
+        <form method="POST" action="{{ url_for('excluir_veiculo', id=veiculo['id']) }}"
+              onsubmit="return confirm('Excluir o veículo {{ veiculo['placa']|e }}? Os serviços, aprovações, prazos e fotos dele serão apagados e não dá para desfazer.')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="aviso-custo">Use só para veículo cadastrado por engano ou de teste.
+                Os serviços, aprovações, prazos e fotos dele serão <strong>apagados</strong> e isso não dá para desfazer.</div>
+            <label for="motivo_excluir">Motivo de excluir o veículo *</label>
+            <textarea id="motivo_excluir" name="motivo" rows="3" maxlength="{{ max_motivo_excluir }}"></textarea>
+            <button type="submit">Excluir o veículo</button>
+        </form>
+    </details>
+    {% endif %}
+
     <script>
         // Prévia das fotos da entrega e aviso na hora se alguma passa do limite
         // (o servidor confere tudo de novo; isto é só para ajudar quem está digitando).
