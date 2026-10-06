@@ -121,7 +121,8 @@ Como ficou implementado (complemento escrito pelo Claude; o dono deve
 revisar):
 - O tempo de garantia é informado **por serviço**, em dias ou em meses
   (0 quer dizer "sem garantia" e conta como informado). Só o dono informa,
-  e dá para corrigir até a entrega ser fechada. Limite de 10 anos.
+  e dá para corrigir até a entrega ser fechada. O tempo máximo depende do
+  tipo de serviço (ver "Limites de garantia" abaixo).
 - "Fechar a entrega" é feito só pelo dono, uma única vez por veículo, e
   só quando: o cliente aprovou o orçamento (aprovação valendo); todos os
   serviços têm o tempo de garantia informado; e as condições que cancelam
@@ -143,4 +144,25 @@ revisar):
   cliente e linhas de assinatura. Dono e funcionário podem ver e imprimir.
 - A tela do veículo mostra se cada garantia está vigente ou vencida, e a
   lista de veículos mostra "Entregue em dd/mm/aaaa".
-- Ainda não existe "desfazer a entrega".
+
+Limites de garantia por tipo de serviço (definidos com o dono):
+- Cada tipo de serviço tem um tempo **máximo** de garantia, em meses.
+  Valores de partida: lataria 12, pintura 24, mecânica 6, elétrica 6,
+  suspensão 12, freios 6, polimento e estética 3, outro 12.
+- O dono ajusta cada limite (de 1 a 120 meses) na tela "Garantia" do
+  menu. Se algum valor for inválido, nada é salvo.
+- O limite vale na hora de informar a garantia de um serviço, em dias ou
+  em meses (12 meses = 365 dias, e assim por diante). Garantias já
+  informadas não mudam quando o limite muda. "Sem garantia" (0) sempre vale.
+- A tela do veículo mostra o limite ao lado do campo de garantia.
+
+Desfazer a entrega:
+- Só o dono pode desfazer uma entrega fechada, e o motivo é obrigatório.
+- A cópia da entrega (serviços, valores, garantias, condições, quem entregou
+  e quando) vai para o histórico "Entregas desfeitas", com quem desfez, quando
+  e por quê. Nada é apagado.
+- O cadastro do veículo destrava (serviços, valores, garantias etc. podem
+  ser corrigidos). O comprovante que o cliente já recebeu deixa de valer; ao
+  fechar a entrega de novo, sai um comprovante novo.
+- Se o valor de um serviço mudar depois de desfazer, a aprovação do cliente
+  deixa de valer e é preciso aprovar de novo antes de fechar a entrega.

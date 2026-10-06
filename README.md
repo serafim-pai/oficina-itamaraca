@@ -20,6 +20,8 @@ Sistema de oficina mecânica (projeto de prática). Histórias de usuário em [H
 - **Garantia e entrega** (história 8): o dono informa o **tempo de garantia de cada serviço** (em dias ou meses; 0 = sem garantia). Para **fechar a entrega** é preciso: orçamento aprovado, garantia informada em todos os serviços e as **condições que cancelam a garantia** (o sistema sugere um texto, que você edita). O sistema calcula **até quando vale cada garantia** a partir da data da entrega e gera o **comprovante para imprimir**, com serviços, valores, garantias, condições e linhas de assinatura.
   - O comprovante sai de uma cópia guardada na hora da entrega e **nunca muda**. Depois da entrega, o cadastro do veículo fica **travado**.
   - A tela do veículo mostra se cada garantia está vigente ou vencida, e a lista mostra "Entregue em dd/mm/aaaa".
+  - **Limite de garantia por tipo de serviço**: lataria 12 meses, pintura 24, mecânica 6, elétrica 6, suspensão 12, freios 6, polimento e estética 3, outro 12. O dono ajusta cada limite (1 a 120 meses) na tela **🛡️ Garantia** do menu; garantias já informadas não mudam.
+  - **Desfazer a entrega** (só o dono, com motivo obrigatório): a entrega vai para o histórico "Entregas desfeitas" (nada é apagado), o cadastro destrava e, ao fechar de novo, sai um comprovante novo. O comprovante antigo deixa de valer.
 
 ## Login e usuários
 - **Ninguém usa o sistema sem entrar** com e-mail e senha. As senhas são guardadas protegidas (nunca "abertas"), com no mínimo 8 caracteres.

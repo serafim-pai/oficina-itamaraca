@@ -114,6 +114,7 @@
                         </select>
                     </div>
                     <button type="submit">{{ 'Atualizar' if s['garantia_valor'] is not none else 'Salvar' }}</button>
+                    <span class="aviso">máx. {{ limites[s['tipo']] }} {{ 'mês' if limites[s['tipo']] == 1 else 'meses' }}</span>
                 </form>
                 {% else %}
                 {{ texto_garantia(s['garantia_valor'], s['garantia_unidade']) }}
@@ -296,6 +297,20 @@
         </table>
         </div>
         <p><a class="botao" href="{{ url_for('comprovante', id=veiculo['id']) }}">🖨️ Ver e imprimir o comprovante</a></p>
+        {% if usuario and usuario['tipo'] == 'DONO' %}
+        <details class="desfazer">
+            <summary>Desfazer a entrega</summary>
+            <form method="POST" action="{{ url_for('desfazer_entrega', id=veiculo['id']) }}"
+                  onsubmit="return confirm('Desfazer a entrega? O comprovante que o cliente recebeu deixa de valer e o cadastro do veículo volta a poder ser alterado.')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="aviso-custo">O comprovante que o cliente já recebeu <strong>deixa de valer</strong>.
+                    Depois de corrigir o cadastro, feche a entrega de novo e entregue o comprovante novo.</div>
+                <label for="motivo_desfazer">Motivo de desfazer a entrega *</label>
+                <textarea id="motivo_desfazer" name="motivo" rows="3" maxlength="{{ max_motivo_desfazer }}"></textarea>
+                <button type="submit">Desfazer a entrega</button>
+            </form>
+        </details>
+        {% endif %}
         {% elif usuario and usuario['tipo'] == 'DONO' %}
         {% if aprovado_vigente %}
         {% if sem_garantia_informada %}
@@ -317,6 +332,27 @@
         {% endif %}
         {% else %}
         <p class="aviso">A entrega é fechada pelo dono da oficina.</p>
+        {% endif %}
+
+        {% if desfeitas %}
+        <details class="historico-desfeitas">
+            <summary>Entregas desfeitas ({{ desfeitas|length }})</summary>
+            <div class="tabela-rolavel">
+            <table>
+                <tr><th>Entrega de</th><th>Valor</th><th>Entregue por</th><th>Desfeita em</th><th>Desfeita por</th><th>Motivo</th></tr>
+                {% for d in desfeitas %}
+                <tr>
+                    <td>{{ formatar_data(d['data_entrega']) }}</td>
+                    <td>{{ formatar_dinheiro(d['total_centavos']) }}</td>
+                    <td>{{ d['entregue_por'] }}</td>
+                    <td>{{ d['desfeita_em'] }}</td>
+                    <td>{{ d['desfeita_por'] }}</td>
+                    <td>{{ d['motivo'] }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            </div>
+        </details>
         {% endif %}
     </div>
     {% else %}

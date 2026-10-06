@@ -114,11 +114,12 @@ class GarantiaPorServicoTest(EntregaBase):
             self.assertIn(b'class="erros"', r.data, (valor, unidade))
         self.assertEqual(self.guardado(self.sid1), (None, None))
 
-    def test_limites_de_10_anos(self):
-        self.assertEqual(self.garantia(self.sid1, 3650, "DIAS").status_code, 302)
-        self.assertIn("no máximo 3650".encode(), self.garantia(self.sid1, 3651, "DIAS").data)
-        self.assertEqual(self.garantia(self.sid2, 120, "MESES").status_code, 302)
-        self.assertIn("no máximo 120".encode(), self.garantia(self.sid2, 121, "MESES").data)
+    def test_o_limite_depende_do_tipo_de_servico(self):
+        # lataria: 12 meses (365 dias); pintura: 24 meses (730 dias) — detalhes em test_limites_desfazer.py
+        self.assertEqual(self.garantia(self.sid1, 12, "MESES").status_code, 302)
+        self.assertIn("limite de garantia para LATARIA".encode(), self.garantia(self.sid1, 13, "MESES").data)
+        self.assertEqual(self.garantia(self.sid2, 24, "MESES").status_code, 302)
+        self.assertIn("limite de garantia para PINTURA".encode(), self.garantia(self.sid2, 25, "MESES").data)
 
     def test_aceita_unidade_em_minusculas(self):
         self.garantia(self.sid1, 5, "meses")
@@ -518,7 +519,8 @@ class MigracaoTest(unittest.TestCase):
         for coluna in ("como_resolver", "valor_centavos", "garantia_valor", "garantia_unidade"):
             self.assertIn(coluna, colunas)
         tabelas = {t[0] for t in banco.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        for tabela in ("aprovacoes", "prazos", "entregas", "entrega_itens"):
+        for tabela in ("aprovacoes", "prazos", "entregas", "entrega_itens", "limites_garantia",
+                       "entregas_desfeitas", "entrega_itens_desfeitos"):
             self.assertIn(tabela, tabelas)
         self.assertEqual(banco.execute("SELECT placa FROM veiculos").fetchone()[0], "OLD1A11")
         self.assertEqual(banco.execute("SELECT problema FROM servicos").fetchone()[0], "Amassado antigo")

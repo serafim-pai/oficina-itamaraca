@@ -1,6 +1,7 @@
 <nav>
     <a href="{{ url_for('index') }}">🚗 Veículos</a>
     {% if usuario and usuario['tipo'] == 'DONO' %}
+    <a href="{{ url_for('limites_garantia') }}">🛡️ Garantia</a>
     <a href="{{ url_for('usuarios') }}">🔐 Usuários</a>
     {% endif %}
     {% if usuario %}

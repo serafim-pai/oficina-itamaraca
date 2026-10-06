@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Limites de garantia - Oficina Itamaracá</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+    {% include '_menu.html' %}
+    <h1>Limites de garantia</h1>
+    <p class="aviso">Tempo <strong>máximo</strong> de garantia que pode ser informado para cada tipo de serviço
+        (em meses). O limite vale na hora de informar a garantia de um serviço. Garantias que já foram informadas
+        não mudam.</p>
+
+    {% if salvo %}
+    <div class="ok">Limites salvos.</div>
+    {% endif %}
+    {% if erros %}
+    <div class="erros">
+        <ul>
+            {% for erro in erros %}
+            <li>{{ erro }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('limites_garantia') }}" class="limites">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="tabela-rolavel">
+        <table>
+            <tr><th>Tipo de serviço</th><th>Limite (meses)</th><th>Em dias</th><th>Valor sugerido</th></tr>
+            {% for tipo in tipos %}
+            <tr>
+                <td><label for="meses_{{ loop.index0 }}">{{ tipo }}</label></td>
+                <td><input type="text" id="meses_{{ loop.index0 }}" name="meses_{{ loop.index0 }}" inputmode="numeric"
+                           maxlength="3" value="{{ valores[tipo] }}"></td>
+                <td>{{ em_dias[tipo] }}</td>
+                <td>{{ padrao[tipo] }} {{ 'mês' if padrao[tipo] == 1 else 'meses' }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        </div>
+        <p class="aviso">Cada limite pode ir de 1 a {{ max_meses }} meses.</p>
+        <button type="submit">Salvar limites</button>
+    </form>
+</body>
+</html>

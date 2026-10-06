@@ -1,4 +1,5 @@
 import hashlib
+import math
 import os
 import re
 import secrets
@@ -38,7 +39,12 @@ MAX_MOTIVO_PRAZO = 300                                         # letras do motiv
 # 3 horas à frente, e por isso o "hoje" do prazo é calculado com este fuso.
 FUSO_BRASIL = timezone(timedelta(hours=-3))
 UNIDADES_GARANTIA = ("DIAS", "MESES")                          # história 8
-MAX_GARANTIA = {"DIAS": 3650, "MESES": 120}                    # limite de sanidade: 10 anos
+# Limite máximo de garantia (em meses) de cada tipo de serviço. São valores de partida: o dono
+# ajusta cada um na tela "Garantia" (o ajuste fica no banco e vale no lugar destes).
+LIMITES_PADRAO_MESES = {"LATARIA": 12, "PINTURA": 24, "MECÂNICA": 6, "ELÉTRICA": 6, "SUSPENSÃO": 12,
+                        "FREIOS": 6, "POLIMENTO E ESTÉTICA": 3, "OUTRO": 12}
+MAX_LIMITE_MESES = 120                                         # o dono pode ajustar cada limite de 1 a 120 meses
+MAX_MOTIVO_DESFAZER = 300                                      # letras do motivo de desfazer uma entrega
 MAX_CONDICOES = 1500                                           # letras das condições que cancelam a garantia
 # Texto sugerido no fechamento da entrega (o dono pode editar antes de fechar).
 CONDICOES_PADRAO = (
@@ -202,6 +208,48 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             entrega_id INTEGER NOT NULL,
             servico_id INTEGER,
+            tipo TEXT NOT NULL,
+            problema TEXT NOT NULL,
+            como_resolver TEXT,
+            valor_centavos INTEGER NOT NULL,
+            garantia_valor INTEGER NOT NULL,
+            garantia_unidade TEXT NOT NULL,
+            garantia_ate TEXT
+        )
+        """
+    )
+    # Limites de garantia ajustados pelo dono (o que não está aqui usa LIMITES_PADRAO_MESES)
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS limites_garantia (
+            tipo TEXT PRIMARY KEY,
+            meses INTEGER NOT NULL
+        )
+        """
+    )
+    # Entregas desfeitas: quando o dono desfaz uma entrega, a cópia dela vai para cá (com quem desfez,
+    # quando e por quê) e some de "entregas", o que destrava o cadastro do veículo. Nada se perde.
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS entregas_desfeitas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            veiculo_id INTEGER NOT NULL,
+            data_entrega TEXT NOT NULL,
+            condicoes TEXT,
+            total_centavos INTEGER NOT NULL,
+            entregue_por TEXT,
+            entregue_em TEXT,
+            motivo TEXT NOT NULL,
+            desfeita_por TEXT,
+            desfeita_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS entrega_itens_desfeitos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entrega_desfeita_id INTEGER NOT NULL,
             tipo TEXT NOT NULL,
             problema TEXT NOT NULL,
             como_resolver TEXT,
@@ -578,6 +626,25 @@ def texto_garantia(valor, unidade):
     return f"{valor} {'dia' if valor == 1 else 'dias'}"
 
 
+def limites_de_garantia(db):
+    """Limite máximo de garantia (em meses) de cada tipo de serviço: o que o dono ajustou ou o padrão."""
+    limites = dict(LIMITES_PADRAO_MESES)
+    for linha in db.execute("SELECT tipo, meses FROM limites_garantia"):
+        if linha["tipo"] in limites:
+            limites[linha["tipo"]] = linha["meses"]
+    return limites
+
+
+def limite_em(unidade, meses):
+    """O limite (dado em meses) na unidade pedida. Em dias, arredonda para cima: 12 meses = 365 dias."""
+    return meses if unidade == "MESES" else math.ceil(meses * 365 / 12)
+
+
+def texto_limite(meses):
+    """'24 meses (730 dias)'."""
+    return f"{meses} {'mês' if meses == 1 else 'meses'} ({limite_em('DIAS', meses)} dias)"
+
+
 def situacao_garantia(garantia_ate, hoje):
     """Situação da garantia de um serviço entregue. Devolve (chave, texto)."""
     if not garantia_ate:
@@ -790,7 +857,10 @@ def pagina_veiculo(id, erros=None, dados=None):
         itens = [dict(i, situacao=situacao_garantia(i["garantia_ate"], hoje))
                  for i in db.execute("SELECT * FROM entrega_itens WHERE entrega_id = ? ORDER BY id", (entrega["id"],))]
     sem_garantia_informada = sum(1 for s in servicos if s["garantia_valor"] is None)
+    desfeitas = db.execute("SELECT * FROM entregas_desfeitas WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
     return render_template("veiculo.html", veiculo=veiculo, servicos=servicos, fotos=fotos,
+                           desfeitas=desfeitas, max_motivo_desfazer=MAX_MOTIVO_DESFAZER,
+                           limites=limites_de_garantia(db), texto_limite=texto_limite,
                            entrega=entrega, itens=itens, sem_garantia_informada=sem_garantia_informada,
                            unidades_garantia=UNIDADES_GARANTIA, texto_garantia=texto_garantia,
                            condicoes_padrao=CONDICOES_PADRAO, max_condicoes=MAX_CONDICOES,
@@ -1002,24 +1072,97 @@ def registrar_garantia(id, servico_id):
     so_dono()
     db = get_db()
     buscar_veiculo(db, id)
-    if not db.execute("SELECT 1 FROM servicos WHERE id = ? AND veiculo_id = ?", (servico_id, id)).fetchone():
+    servico = db.execute("SELECT tipo FROM servicos WHERE id = ? AND veiculo_id = ?", (servico_id, id)).fetchone()
+    if not servico:
         abort(404)
     unidade = request.form.get("unidade", "").strip().upper()
     texto = request.form.get("valor", "").strip()
+    limite_meses = limites_de_garantia(db).get(servico["tipo"], MAX_LIMITE_MESES)
 
     erro = None
     if unidade not in UNIDADES_GARANTIA:
         erro = "Escolha se o tempo de garantia é em dias ou em meses."
     elif not re.fullmatch(r"\d{1,4}", texto):
         erro = "Informe o tempo de garantia com um número inteiro (use 0 para 'sem garantia')."
-    elif int(texto) > MAX_GARANTIA[unidade]:
-        erro = f"A garantia pode ter no máximo {MAX_GARANTIA[unidade]} {unidade.lower()}."
+    elif int(texto) > limite_em(unidade, limite_meses):
+        erro = f"O limite de garantia para {servico['tipo']} é {texto_limite(limite_meses)}."
     if erro:
         return pagina_veiculo(id, [erro])
 
     db.execute("UPDATE servicos SET garantia_valor = ?, garantia_unidade = ? WHERE id = ?",
                (int(texto), unidade, servico_id))
     db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/limites-garantia", methods=["GET", "POST"])
+def limites_garantia():
+    """O dono ajusta o limite máximo de garantia (em meses) de cada tipo de serviço.
+    O limite vale na hora de informar a garantia de um serviço; garantias já informadas não mudam."""
+    so_dono()
+    db = get_db()
+    erros = []
+    valores = limites_de_garantia(db)
+    if request.method == "POST":
+        novos = {}
+        valores = {}
+        for i, tipo in enumerate(TIPOS_SERVICO):
+            texto = request.form.get(f"meses_{i}", "").strip()
+            valores[tipo] = texto
+            if re.fullmatch(r"\d{1,3}", texto) and 1 <= int(texto) <= MAX_LIMITE_MESES:
+                novos[tipo] = int(texto)
+            else:
+                erros.append(f"{tipo}: informe um número inteiro de meses, de 1 a {MAX_LIMITE_MESES}.")
+        if not erros:
+            for tipo, meses in novos.items():
+                db.execute("INSERT OR REPLACE INTO limites_garantia (tipo, meses) VALUES (?, ?)", (tipo, meses))
+            db.commit()
+            return redirect(url_for("limites_garantia", salvo=1))
+    em_dias = {tipo: (texto_limite(int(v)) if re.fullmatch(r"\d{1,3}", str(v)) and 1 <= int(v) <= MAX_LIMITE_MESES else "-")
+               for tipo, v in valores.items()}
+    return render_template("limites.html", tipos=TIPOS_SERVICO, valores=valores, erros=erros, em_dias=em_dias,
+                           salvo=bool(request.args.get("salvo")), padrao=LIMITES_PADRAO_MESES,
+                           max_meses=MAX_LIMITE_MESES)
+
+
+@app.route("/veiculos/<int:id>/entrega/desfazer", methods=["POST"])
+def desfazer_entrega(id):
+    """O dono desfaz uma entrega fechada (por engano ou para corrigir algo). O motivo é obrigatório.
+    A cópia da entrega vai para o histórico de entregas desfeitas (nada se perde) e o cadastro do
+    veículo destrava. O comprovante que o cliente já recebeu deixa de valer: ao fechar de novo, sai outro."""
+    so_dono()
+    db = get_db()
+    buscar_veiculo(db, id)
+    entrega = db.execute("SELECT * FROM entregas WHERE veiculo_id = ?", (id,)).fetchone()
+    motivo = " ".join(request.form.get("motivo", "").split())
+
+    erros = []
+    if not entrega:
+        erros.append("Este veículo não está entregue: não há entrega para desfazer.")
+    if sum(1 for letra in motivo if letra.isalpha()) < 3:
+        erros.append("Explique o motivo de desfazer a entrega.")
+    elif len(motivo) > MAX_MOTIVO_DESFAZER:
+        erros.append(f"O motivo pode ter no máximo {MAX_MOTIVO_DESFAZER} letras.")
+    if erros:
+        return pagina_veiculo(id, erros)
+
+    try:
+        cursor = db.execute(
+            "INSERT INTO entregas_desfeitas (veiculo_id, data_entrega, condicoes, total_centavos, entregue_por, "
+            "entregue_em, motivo, desfeita_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (id, entrega["data_entrega"], entrega["condicoes"], entrega["total_centavos"], entrega["entregue_por"],
+             entrega["criado_em"], motivo, g.usuario["nome"]))
+        db.execute(
+            "INSERT INTO entrega_itens_desfeitos (entrega_desfeita_id, tipo, problema, como_resolver, valor_centavos, "
+            "garantia_valor, garantia_unidade, garantia_ate) SELECT ?, tipo, problema, como_resolver, valor_centavos, "
+            "garantia_valor, garantia_unidade, garantia_ate FROM entrega_itens WHERE entrega_id = ? ORDER BY id",
+            (cursor.lastrowid, entrega["id"]))
+        db.execute("DELETE FROM entrega_itens WHERE entrega_id = ?", (entrega["id"],))
+        db.execute("DELETE FROM entregas WHERE id = ?", (entrega["id"],))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return redirect(url_for("ver_veiculo", id=id))
 
 
