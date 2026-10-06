@@ -121,7 +121,7 @@
                 {% endif %}
             </td>
             <td>{{ s['registrado_por'] }}</td>
-            <td>{{ s['criado_em'] }}</td>
+            <td>{{ s['criado_em']|hora_brasil }}</td>
             {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
             <td class="acoes">
                 <form method="POST" action="{{ url_for('excluir_servico', id=veiculo['id'], servico_id=s['id']) }}"
@@ -158,7 +158,7 @@
             Última decisão: <strong>{{ 'Aprovado' if ult['decisao'] == 'APROVADO' else 'Recusado' }}</strong>
             ({{ formatar_dinheiro(ult['total_centavos']) }})<br>
             Resposta do cliente: {{ nomes_formas.get(ult['forma'], ult['forma']) }}<br>
-            Registrada por {{ ult['registrado_por'] }} em {{ ult['criado_em'] }}
+            Registrada por {{ ult['registrado_por'] }} em {{ ult['criado_em']|hora_brasil }}
             {% if ult['observacao'] %}<br>Observação: {{ ult['observacao'] }}{% endif %}
         </p>
         {% if situacao not in ('APROVADO', 'RECUSADO') %}
@@ -206,7 +206,7 @@
                 <tr><th>Quando</th><th>Decisão</th><th>Valor</th><th>Como</th><th>Registrado por</th><th>Observação</th></tr>
                 {% for a in aprovacoes %}
                 <tr>
-                    <td>{{ a['criado_em'] }}</td>
+                    <td>{{ a['criado_em']|hora_brasil }}</td>
                     <td>{{ 'Aprovado' if a['decisao'] == 'APROVADO' else 'Recusado' }}</td>
                     <td>{{ formatar_dinheiro(a['total_centavos']) }}</td>
                     <td>{{ nomes_formas.get(a['forma'], a['forma']) }}</td>
@@ -228,7 +228,7 @@
         {% set pz = prazos[0] %}
         <p class="detalhe">
             Prazo prometido ao cliente: <strong>{{ formatar_data(pz['data_prevista']) }}</strong><br>
-            Definido por {{ pz['registrado_por'] }} em {{ pz['criado_em'] }}
+            Definido por {{ pz['registrado_por'] }} em {{ pz['criado_em']|hora_brasil }}
             {% if pz['motivo'] %}<br>Motivo: {{ pz['motivo'] }}{% endif %}
         </p>
         {% if not aprovado_vigente %}
@@ -264,7 +264,7 @@
                 <tr><th>Definido em</th><th>Prazo</th><th>Por</th><th>Motivo</th></tr>
                 {% for p in prazos %}
                 <tr>
-                    <td>{{ p['criado_em'] }}</td>
+                    <td>{{ p['criado_em']|hora_brasil }}</td>
                     <td>{{ formatar_data(p['data_prevista']) }}</td>
                     <td>{{ p['registrado_por'] }}</td>
                     <td>{{ p['motivo'] or '-' }}</td>
@@ -281,7 +281,7 @@
         {% if entrega %}
         <p><span class="selo selo-entregue">Entregue em {{ formatar_data(entrega['data_entrega']) }}</span></p>
         <p class="detalhe">
-            Entrega fechada por {{ entrega['entregue_por'] }} em {{ entrega['criado_em'] }}<br>
+            Entrega fechada por {{ entrega['entregue_por'] }} em {{ entrega['criado_em']|hora_brasil }}<br>
             Valor total: {{ formatar_dinheiro(entrega['total_centavos']) }}
         </p>
         <div class="tabela-rolavel">
@@ -345,7 +345,7 @@
                     <td>{{ formatar_data(d['data_entrega']) }}</td>
                     <td>{{ formatar_dinheiro(d['total_centavos']) }}</td>
                     <td>{{ d['entregue_por'] }}</td>
-                    <td>{{ d['desfeita_em'] }}</td>
+                    <td>{{ d['desfeita_em']|hora_brasil }}</td>
                     <td>{{ d['desfeita_por'] }}</td>
                     <td>{{ d['motivo'] }}</td>
                 </tr>

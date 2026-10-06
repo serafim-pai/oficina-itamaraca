@@ -559,6 +559,20 @@ def formatar_data(texto_iso):
     return datetime.strptime(texto_iso, "%Y-%m-%d").strftime("%d/%m/%Y")
 
 
+@app.template_filter("hora_brasil")
+def hora_brasil(texto_utc):
+    """Mostra uma data e hora guardada pelo banco (sempre em UTC, 'AAAA-MM-DD HH:MM:SS') no horário de
+    Brasília: '2026-10-06 00:30:30' vira '05/10/2026 21:30'. Vazio vira '-'; se o texto não for uma
+    data e hora, é mostrado como veio (melhor isso do que quebrar a tela)."""
+    if not texto_utc:
+        return "-"
+    try:
+        utc = datetime.strptime(str(texto_utc), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return str(texto_utc)
+    return utc.astimezone(FUSO_BRASIL).strftime("%d/%m/%Y %H:%M")
+
+
 def situacao_prazo(data_prevista, hoje):
     """Situação do prazo de entrega. 'data_prevista' é um texto AAAA-MM-DD (ou None).
     Devolve (chave, texto)."""

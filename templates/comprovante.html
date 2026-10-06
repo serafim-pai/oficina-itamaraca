@@ -51,10 +51,10 @@
 
         {% if aprovacao %}
         <p class="pequeno">Orçamento {{ 'aprovado' if aprovacao['decisao'] == 'APROVADO' else 'recusado' }} pelo cliente
-            ({{ nomes_formas.get(aprovacao['forma'], aprovacao['forma']) }}) em {{ aprovacao['criado_em'] }},
+            ({{ nomes_formas.get(aprovacao['forma'], aprovacao['forma']) }}) em {{ aprovacao['criado_em']|hora_brasil }},
             no valor de {{ formatar_dinheiro(aprovacao['total_centavos']) }}.</p>
         {% endif %}
-        <p class="pequeno">Entrega registrada por {{ entrega['entregue_por'] }} em {{ entrega['criado_em'] }} (horário do servidor).</p>
+        <p class="pequeno">Entrega registrada por {{ entrega['entregue_por'] }} em {{ entrega['criado_em']|hora_brasil }} (horário de Brasília).</p>
 
         <div class="assinaturas">
             <div><span class="linha"></span>Cliente</div>

@@ -30,6 +30,9 @@ Sistema de oficina mecânica (projeto de prática). Histórias de usuário em [H
 - **Tela de Usuários** (só o dono): criar funcionários e **bloquear/desbloquear** acessos. Quem é bloqueado perde o acesso na hora. O dono não bloqueia a si mesmo.
 - **Proteções**: 5 senhas erradas seguidas bloqueiam aquele e-mail por 10 minutos; formulários com token anti-CSRF; sair só por botão; cookie de sessão próprio (`oficina_sessao`), para não brigar com o sistema de varejo que usa o mesmo endereço.
 
+## Horário
+Todas as horas que aparecem nas telas (quando um serviço foi registrado, quando o cliente aprovou, quando a entrega foi fechada ou desfeita etc.) estão no **horário de Brasília**. O banco guarda tudo em UTC (o relógio do servidor), e a conversão é feita só na hora de mostrar. O "hoje" do prazo de entrega e da data de entrega também usa o horário de Brasília.
+
 ## Como rodar
 ```
 pip install -r requirements.txt

@@ -39,6 +39,9 @@ Integre logo e em pedaços pequenos, em vez de deixar a branch ficar velha por d
 ## 7. Banco de dados
 - Mudanças só **aditivas** (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN`), aplicadas sozinhas ao iniciar o sistema.
   Nunca apagar nem renomear coluna/tabela que já está no servidor.
+- **Horários**: o banco guarda data e hora **sempre em UTC** (`CURRENT_TIMESTAMP`). Nas telas, mostre com o
+  filtro `|hora_brasil` (horário de Brasília). Datas "de calendário" (entrega, prazo) usam `hoje_brasil()`.
+  Nunca exiba um `criado_em` cru e nunca use `datetime.now()` sem fuso para decidir "que dia é hoje".
 
 ## 8. Publicação no PythonAnywhere
 - **Só quando o usuário pedir.** Fluxo: backup do banco → `git pull` → teste de carga com Python 3.10 → Reload → conferir no site.
