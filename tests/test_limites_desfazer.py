@@ -4,7 +4,7 @@ import re
 import unittest
 from datetime import date
 
-from base import BaseTest, oficina
+from base import BaseTest, foto_de_entrega, oficina
 
 HOJE_REAL = oficina.hoje_brasil
 HOJE = date(2026, 10, 15)
@@ -216,7 +216,8 @@ class DesfazerEntregaTest(Base):
     # ---- atalhos ----
     def fechar(self, vid=None):
         vid = vid or self.vid
-        return self.dono_c.post(f"/veiculos/{vid}/entrega", data={"condicoes": CONDICOES, "assinatura": self.assinatura(vid)})
+        return self.dono_c.post(f"/veiculos/{vid}/entrega", content_type="multipart/form-data",
+                                data={"condicoes": CONDICOES, "assinatura": self.assinatura(vid), "fotos_entrega": foto_de_entrega()})
 
     def desfazer(self, motivo="Cliente pediu para trocar o serviço de pintura", cliente=None, vid=None):
         return (cliente or self.dono_c).post(f"/veiculos/{vid or self.vid}/entrega/desfazer", data={"motivo": motivo})

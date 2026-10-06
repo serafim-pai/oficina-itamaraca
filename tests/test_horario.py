@@ -4,7 +4,7 @@ import re
 import unittest
 from datetime import date, timedelta
 
-from base import BaseTest, oficina
+from base import BaseTest, foto_de_entrega, oficina
 
 HOJE_REAL = oficina.hoje_brasil
 HOJE = date(2026, 10, 15)
@@ -86,7 +86,8 @@ class HorarioNasTelasTest(BaseTest):
                        data={"decisao": decisao, "forma": "TELEFONE", "assinatura": self.assinatura()})
 
     def fechar(self):
-        return self.dono_c.post(f"/veiculos/{self.vid}/entrega", data={"condicoes": CONDICOES, "assinatura": self.assinatura()})
+        return self.dono_c.post(f"/veiculos/{self.vid}/entrega", content_type="multipart/form-data",
+                                data={"condicoes": CONDICOES, "assinatura": self.assinatura(), "fotos_entrega": foto_de_entrega()})
 
     def pagina(self):
         return self.dono_c.get(f"/veiculos/{self.vid}").data.decode()

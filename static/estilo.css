@@ -187,6 +187,8 @@ body.comprovante-pagina { max-width: 820px; }
 .comprovante h1 { margin: 0; }
 .comprovante .titulo-comprovante { text-align: center; border: 0; margin: 4px 0 18px; color: #333; }
 .comprovante h3 { margin: 22px 0 6px; color: #1a3c6e; }
+.comprovante .fotos-comprovante { display: flex; flex-wrap: wrap; gap: 6px; }
+.comprovante .fotos-comprovante img { width: 120px; height: 90px; object-fit: cover; border: 1px solid #999; border-radius: 3px; }
 .comprovante table { margin-top: 6px; }
 .comprovante table.dados th { background: #eef2f8; color: #1a3c6e; width: 16%; }
 .comprovante table.servicos th { background: #1a3c6e; color: white; }

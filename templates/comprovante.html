@@ -49,6 +49,15 @@
         <p class="condicoes">Nenhum dos serviços acima tem garantia.</p>
         {% endif %}
 
+        {% if fotos_entrega %}
+        <h3>Fotos do veículo na entrega</h3>
+        <div class="fotos-comprovante">
+            {% for foto_id in fotos_entrega %}
+            <img src="{{ url_for('foto_miniatura', id=foto_id) }}" alt="Foto do veículo {{ veiculo['placa'] }} na entrega">
+            {% endfor %}
+        </div>
+        {% endif %}
+
         {% if aprovacao %}
         <p class="pequeno">Orçamento {{ 'aprovado' if aprovacao['decisao'] == 'APROVADO' else 'recusado' }} pelo cliente
             ({{ nomes_formas.get(aprovacao['forma'], aprovacao['forma']) }}) em {{ aprovacao['criado_em']|hora_brasil }},

@@ -4,7 +4,7 @@ import re
 import unittest
 from datetime import date, timedelta
 
-from base import BaseTest, oficina
+from base import BaseTest, foto_de_entrega, oficina
 
 HOJE_REAL = oficina.hoje_brasil
 HOJE = date(2026, 10, 15)
@@ -54,8 +54,9 @@ class EntregaBase(BaseTest):
 
     def fechar(self, condicoes=CONDICOES, assinatura=..., cliente=None):
         cliente = cliente or self.dono_c
-        return cliente.post(f"/veiculos/{self.vid}/entrega", data={
-            "condicoes": condicoes, "assinatura": self.assinatura(cliente) if assinatura is ... else assinatura})
+        return cliente.post(f"/veiculos/{self.vid}/entrega", content_type="multipart/form-data", data={
+            "condicoes": condicoes, "assinatura": self.assinatura(cliente) if assinatura is ... else assinatura,
+            "fotos_entrega": foto_de_entrega()})
 
     def entregas(self):
         return self.sql("SELECT * FROM entregas ORDER BY id")

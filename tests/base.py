@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
+from io import BytesIO
 
 _pasta = tempfile.mkdtemp()
 os.environ["OFICINA_DB"] = os.path.join(_pasta, "teste.db")   # tem que vir ANTES de importar o sistema
@@ -14,6 +15,15 @@ os.environ.pop("OFICINA_CODIGO_INICIAL", None)
 
 from werkzeug.security import generate_password_hash   # noqa: E402
 import app as oficina                                   # noqa: E402
+
+def foto_de_entrega(nome="entrega.jpg", tamanho=(200, 100), cor=(30, 120, 200)):
+    """Uma foto de verdade (para o campo 'fotos do veículo na entrega' dos testes)."""
+    from PIL import Image
+    memoria = BytesIO()
+    Image.new("RGB", tamanho, cor).save(memoria, "JPEG")
+    memoria.seek(0)
+    return memoria, nome
+
 
 SENHA = "senha1234"
 HASH = generate_password_hash(SENHA, method="pbkdf2:sha256")   # calculado uma vez só (é lento de propósito)

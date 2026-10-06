@@ -128,6 +128,17 @@ revisar):
   serviços têm o tempo de garantia informado; e as condições que cancelam
   a garantia foram escritas (o sistema sugere um texto, que o dono edita;
   se todos os serviços forem "sem garantia", as condições são opcionais).
+- **Fotos do veículo na entrega:** para fechar a entrega é obrigatório
+  enviar de 1 a 10 fotos do carro como ele está saindo da oficina. Elas
+  passam pelo mesmo tratamento das outras fotos (confere o conteúdo,
+  reduz, tira o GPS), são guardadas junto com a entrega (se algo falhar,
+  nada fica pela metade), aparecem na tela do veículo, numa galeria
+  própria, e no comprovante. Não podem ser trocadas nem excluídas.
+  As fotos tiradas no cadastro e depois (as de "entrada") continuam
+  separadas e não contam como fotos de entrega.
+- Se a entrega for desfeita, as fotos dela **não são apagadas**: ficam
+  guardadas no histórico "Entregas desfeitas", ligadas àquela entrega. Ao
+  fechar de novo é preciso enviar novas fotos.
 - A data de entrega é o dia em que a entrega é fechada (horário de
   Brasília). A garantia de cada serviço vale **até** a data de entrega
   mais o tempo informado (meses contam em calendário: 31/01 + 1 mês =

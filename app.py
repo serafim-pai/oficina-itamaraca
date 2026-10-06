@@ -312,6 +312,13 @@ def init_db():
         db.execute("ALTER TABLE servicos ADD COLUMN garantia_valor INTEGER")
     if "garantia_unidade" not in colunas:
         db.execute("ALTER TABLE servicos ADD COLUMN garantia_unidade TEXT")
+    # Fotos da entrega: "momento" diz quando a foto foi tirada. ENTRADA (as que já existiam), ENTREGA, ou
+    # ENTREGA_DESFEITA (as da entrega que depois foi desfeita; ficam guardadas, ligadas a ela).
+    colunas_fotos = [c[1] for c in db.execute("PRAGMA table_info(fotos)")]
+    if "momento" not in colunas_fotos:
+        db.execute("ALTER TABLE fotos ADD COLUMN momento TEXT NOT NULL DEFAULT 'ENTRADA'")
+    if "entrega_desfeita_id" not in colunas_fotos:
+        db.execute("ALTER TABLE fotos ADD COLUMN entrega_desfeita_id INTEGER")
     db.commit()
     db.close()
     os.makedirs(PASTA_FOTOS, exist_ok=True)
@@ -689,7 +696,7 @@ def pagina_inicial(erros=None, dados=None):
     db = get_db()
     veiculos = db.execute("SELECT * FROM veiculos ORDER BY id DESC").fetchall()
     fotos = {}
-    for foto in db.execute("SELECT id, veiculo_id FROM fotos ORDER BY id"):
+    for foto in db.execute("SELECT id, veiculo_id FROM fotos WHERE momento = 'ENTRADA' ORDER BY id"):
         fotos.setdefault(foto["veiculo_id"], []).append(foto["id"])
     return render_template("index.html", veiculos=veiculos, fotos=fotos, erros=erros or [],
                            dados=dados or {}, max_fotos=MAX_FOTOS,
@@ -777,11 +784,28 @@ def apagar_arquivos_da_foto(codigo):
     apagar_arquivos([os.path.join(PASTA_FOTOS, f"{codigo}{sufixo}.jpg") for sufixo in ("", "_m")])
 
 
-def guardar_fotos(db, veiculo_id, fotos, criados):
-    """Grava os arquivos das fotos e registra no banco."""
+def guardar_fotos(db, veiculo_id, fotos, criados, momento="ENTRADA"):
+    """Grava os arquivos das fotos e registra no banco. 'momento' é ENTRADA (o estado em que o carro
+    chegou) ou ENTREGA (o estado em que o carro saiu)."""
     for grande, miniatura in fotos:
         codigo = gravar_arquivos_da_foto(grande, miniatura, criados)
-        db.execute("INSERT INTO fotos (veiculo_id, arquivo) VALUES (?, ?)", (veiculo_id, codigo))
+        db.execute("INSERT INTO fotos (veiculo_id, arquivo, momento) VALUES (?, ?, ?)", (veiculo_id, codigo, momento))
+
+
+def preparar_fotos_enviadas(campo):
+    """Lê as fotos enviadas num campo do formulário. Devolve (erros, fotos_prontas, quantas_foram_enviadas)."""
+    arquivos = [a for a in request.files.getlist(campo) if a and a.filename]
+    erros, prontas = [], []
+    if len(arquivos) > MAX_FOTOS:
+        erros.append(f"Envie no máximo {MAX_FOTOS} fotos de uma vez.")
+    else:
+        for arquivo in arquivos:
+            erro_foto, pronta = preparar_foto(arquivo)
+            if erro_foto:
+                erros.append(erro_foto)
+            else:
+                prontas.append(pronta)
+    return erros, prontas, len(arquivos)
 
 
 def anotar_foto(db, veiculo_id, foto_id, acao):
@@ -818,7 +842,7 @@ def adicionar_fotos(id):
     db = get_db()
     buscar_veiculo(db, id)
     arquivos = [a for a in request.files.getlist("fotos") if a and a.filename]
-    existentes = db.execute("SELECT COUNT(*) FROM fotos WHERE veiculo_id = ?", (id,)).fetchone()[0]
+    existentes = db.execute("SELECT COUNT(*) FROM fotos WHERE veiculo_id = ? AND momento = 'ENTRADA'", (id,)).fetchone()[0]
     erros, preparadas = [], []
     if not arquivos:
         erros.append("Escolha pelo menos uma foto para adicionar.")
@@ -852,8 +876,10 @@ def adicionar_fotos(id):
 
 
 def buscar_foto_do_veiculo(db, id, foto_id):
-    """A foto, desde que seja mesmo deste veículo (senão 404)."""
-    foto_do_veiculo = db.execute("SELECT * FROM fotos WHERE id = ? AND veiculo_id = ?", (foto_id, id)).fetchone()
+    """A foto de ENTRADA, desde que seja mesmo deste veículo (senão 404). As fotos da entrega são
+    prova do estado em que o carro saiu e não podem ser trocadas nem excluídas."""
+    foto_do_veiculo = db.execute("SELECT * FROM fotos WHERE id = ? AND veiculo_id = ? AND momento = 'ENTRADA'",
+                                 (foto_id, id)).fetchone()
     if not foto_do_veiculo:
         abort(404)
     return foto_do_veiculo
@@ -988,7 +1014,11 @@ def pagina_veiculo(id, erros=None, dados=None):
     db = get_db()
     veiculo = buscar_veiculo(db, id)
     servicos = db.execute("SELECT * FROM servicos WHERE veiculo_id = ? ORDER BY id", (id,)).fetchall()
-    fotos = [f["id"] for f in db.execute("SELECT id FROM fotos WHERE veiculo_id = ? ORDER BY id", (id,))]
+    fotos = [f["id"] for f in db.execute("SELECT id FROM fotos WHERE veiculo_id = ? AND momento = 'ENTRADA' ORDER BY id", (id,))]
+    fotos_entrega = [f["id"] for f in db.execute("SELECT id FROM fotos WHERE veiculo_id = ? AND momento = 'ENTREGA' ORDER BY id", (id,))]
+    fotos_desfeitas = {}                 # fotos de entregas desfeitas, agrupadas pela entrega a que pertenciam
+    for f in db.execute("SELECT id, entrega_desfeita_id FROM fotos WHERE veiculo_id = ? AND momento = 'ENTREGA_DESFEITA' ORDER BY id", (id,)):
+        fotos_desfeitas.setdefault(f["entrega_desfeita_id"], []).append(f["id"])
     total_centavos = sum(s["valor_centavos"] or 0 for s in servicos)
     faltam = sum(1 for s in servicos if s["valor_centavos"] is None)
     orcamento_completo = bool(servicos) and faltam == 0
@@ -1008,6 +1038,7 @@ def pagina_veiculo(id, erros=None, dados=None):
     desfeitas = db.execute("SELECT * FROM entregas_desfeitas WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
     historico_fotos = db.execute("SELECT * FROM fotos_historico WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
     return render_template("veiculo.html", veiculo=veiculo, servicos=servicos, fotos=fotos,
+                           fotos_entrega=fotos_entrega, fotos_desfeitas=fotos_desfeitas,
                            historico_fotos=historico_fotos, max_fotos=MAX_FOTOS, max_fotos_veiculo=MAX_FOTOS_VEICULO,
                            max_mb=MAX_BYTES_FOTO // (1024 * 1024),
                            desfeitas=desfeitas, max_motivo_desfazer=MAX_MOTIVO_DESFAZER,
@@ -1308,6 +1339,9 @@ def desfazer_entrega(id):
             "garantia_valor, garantia_unidade, garantia_ate) SELECT ?, tipo, problema, como_resolver, valor_centavos, "
             "garantia_valor, garantia_unidade, garantia_ate FROM entrega_itens WHERE entrega_id = ? ORDER BY id",
             (cursor.lastrowid, entrega["id"]))
+        # As fotos da entrega não são apagadas: ficam guardadas, ligadas à entrega desfeita
+        db.execute("UPDATE fotos SET momento = 'ENTREGA_DESFEITA', entrega_desfeita_id = ? "
+                   "WHERE veiculo_id = ? AND momento = 'ENTREGA'", (cursor.lastrowid, id))
         db.execute("DELETE FROM entrega_itens WHERE entrega_id = ?", (entrega["id"],))
         db.execute("DELETE FROM entregas WHERE id = ?", (entrega["id"],))
         db.commit()
@@ -1350,10 +1384,18 @@ def fechar_entrega(id):
         erros.append("Escreva as condições que cancelam a garantia (aparecem no comprovante do cliente).")
     if len(condicoes) > MAX_CONDICOES:
         erros.append(f"As condições podem ter no máximo {MAX_CONDICOES} letras.")
+    # Fotos do veículo na entrega: obrigatórias (são a prova do estado em que o carro saiu)
+    erros_fotos, fotos_entrega, enviadas = preparar_fotos_enviadas("fotos_entrega")
+    erros += erros_fotos
+    if not enviadas:
+        erros.append("Tire ou escolha pelo menos uma foto do veículo na entrega: ela é a prova do estado em que o carro saiu.")
     if erros:
+        if enviadas:
+            erros.append("Por segurança do navegador, as fotos precisam ser escolhidas de novo.")
         return pagina_veiculo(id, erros, {"condicoes": condicoes})
 
     total = sum(s["valor_centavos"] for s in servicos)
+    criados = []
     try:
         cursor = db.execute("INSERT INTO entregas (veiculo_id, data_entrega, condicoes, total_centavos, entregue_por) "
                             "VALUES (?, ?, ?, ?, ?)",
@@ -1364,10 +1406,16 @@ def fechar_entrega(id):
                        "valor_centavos, garantia_valor, garantia_unidade, garantia_ate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                        (cursor.lastrowid, s["id"], s["tipo"], s["problema"], s["como_resolver"], s["valor_centavos"],
                         s["garantia_valor"], s["garantia_unidade"], ate.isoformat() if ate else None))
+        guardar_fotos(db, id, fotos_entrega, criados, momento="ENTREGA")
         db.commit()
     except sqlite3.IntegrityError:      # dois cliques ao mesmo tempo: só um fecha a entrega
         db.rollback()
+        apagar_arquivos(criados)
         return pagina_veiculo(id, ["Este veículo já foi entregue."]), 409
+    except Exception:
+        db.rollback()
+        apagar_arquivos(criados)        # não deixa foto "órfã" no disco
+        raise
     return redirect(url_for("comprovante", id=id))
 
 
@@ -1383,7 +1431,10 @@ def comprovante(id):
     itens = [dict(i, situacao=situacao_garantia(i["garantia_ate"], hoje))
              for i in db.execute("SELECT * FROM entrega_itens WHERE entrega_id = ? ORDER BY id", (entrega["id"],))]
     aprovacao = db.execute("SELECT * FROM aprovacoes WHERE veiculo_id = ? ORDER BY id DESC LIMIT 1", (id,)).fetchone()
+    fotos_entrega = [f["id"] for f in db.execute(
+        "SELECT id FROM fotos WHERE veiculo_id = ? AND momento = 'ENTREGA' ORDER BY id", (id,))]
     return render_template("comprovante.html", veiculo=veiculo, entrega=entrega, itens=itens, aprovacao=aprovacao,
+                           fotos_entrega=fotos_entrega,
                            formatar_data=formatar_data, formatar_dinheiro=formatar_dinheiro,
                            texto_garantia=texto_garantia, nomes_formas=NOMES_FORMAS_APROVACAO)
 
