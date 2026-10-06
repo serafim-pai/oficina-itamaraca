@@ -9,6 +9,14 @@
     {% include '_menu.html' %}
     <h1>OFICINA ITAMARACÁ</h1>
 
+    {% if cadastrado %}
+    <div class="ok" id="cadastrado">
+        &#10003; Veículo <strong>{{ cadastrado['placa'] }}</strong> cadastrado com sucesso.
+        <a href="{{ url_for('ver_veiculo', id=cadastrado['id']) }}">Abrir o veículo</a>
+        para registrar serviços e orçamento. O formulário abaixo está limpo para um novo cadastro.
+    </div>
+    {% endif %}
+
     {% if erros %}
     <div class="erros">
         <ul>

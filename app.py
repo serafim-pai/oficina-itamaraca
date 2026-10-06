@@ -703,12 +703,16 @@ def situacao_garantia(garantia_ate, hoje):
 def pagina_inicial(erros=None, dados=None):
     """Desenha a tela de cadastro com a lista de veículos e as fotos de cada um."""
     db = get_db()
+    cadastrado = None
+    if request.method == "GET" and request.args.get("cadastrado", "").isdigit():
+        cadastrado = db.execute("SELECT id, placa FROM veiculos WHERE id = ?",
+                                (int(request.args["cadastrado"]),)).fetchone()
     veiculos = db.execute("SELECT * FROM veiculos ORDER BY id DESC").fetchall()
     fotos = {}
     for foto in db.execute("SELECT id, veiculo_id FROM fotos WHERE momento = 'ENTRADA' ORDER BY id"):
         fotos.setdefault(foto["veiculo_id"], []).append(foto["id"])
     return render_template("index.html", veiculos=veiculos, fotos=fotos, erros=erros or [],
-                           dados=dados or {}, max_fotos=MAX_FOTOS,
+                           dados=dados or {}, cadastrado=cadastrado, max_fotos=MAX_FOTOS,
                            max_mb=MAX_BYTES_FOTO // (1024 * 1024),
                            situacoes=situacoes_dos_veiculos(db, veiculos),
                            prazos=prazos_dos_veiculos(db, veiculos))
@@ -1007,7 +1011,7 @@ def cadastrar_veiculo():
             if os.path.exists(caminho):
                 os.remove(caminho)
         raise
-    return redirect(url_for("index"))
+    return redirect(url_for("index", cadastrado=cursor.lastrowid) + "#cadastrado")
 
 
 # ---------- PROBLEMAS E TIPOS DE SERVIÇO (por veículo) ----------

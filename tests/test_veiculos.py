@@ -45,3 +45,20 @@ class VeiculoTest(BaseTest):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AvisoDeCadastroTest(BaseTest):
+    def test_depois_de_cadastrar_mostra_aviso_com_a_placa_e_link_do_veiculo(self):
+        func = self.funcionario()
+        r = func.post("/veiculos", data={"placa": "ABC1D23", "documento_deixado": "on"})
+        self.assertEqual(r.status_code, 302)
+        pagina = func.get(r.headers["Location"]).data.decode()
+        vid = self.sql("SELECT id FROM veiculos")[0]["id"]
+        self.assertIn("cadastrado com sucesso", pagina)
+        self.assertIn("ABC1D23", pagina)
+        self.assertIn(f"/veiculos/{vid}", pagina)
+
+    def test_sem_cadastro_novo_nao_mostra_aviso_e_id_invalido_e_ignorado(self):
+        func = self.funcionario()
+        self.assertNotIn("cadastrado com sucesso", func.get("/").data.decode())
+        self.assertNotIn("cadastrado com sucesso", func.get("/?cadastrado=999").data.decode())
