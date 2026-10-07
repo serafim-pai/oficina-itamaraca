@@ -228,3 +228,9 @@ está no estoque se pesquisa e se compra na autopeça.
 - O que for achado serve de **referência** para comprar: nada entra no orçamento. Cada serviço tem uma
   anotação opcional "peça de referência" (número original, loja, preço visto), de até 300 letras, que dá
   para editar até a entrega e fica travada depois dela.
+
+- Marca, modelo, cor, ano e quilometragem podem ser completados ou corrigidos depois do cadastro
+  ("Corrigir marca, modelo, cor, ano e km do veículo", dono e funcionário), até a entrega. Sem marca e
+  modelo o formulário já vem aberto, com o aviso de que são necessários para pesquisar peças. Placa e
+  responsável não mudam aqui. Se algum campo estiver inválido (ano fora de 1900-2100, texto longo
+  demais), nada é salvo.

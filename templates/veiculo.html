@@ -29,6 +29,28 @@
             <button type="submit">Salvar</button>
         </form>
     </details>
+    {% if not entrega %}
+    <details class="telefone-cliente" {{ 'open' if not (veiculo['marca'] and veiculo['modelo']) }}>
+        <summary>✏️ Corrigir marca, modelo, cor, ano e km do veículo</summary>
+        {% if not (veiculo['marca'] and veiculo['modelo']) %}
+        <p class="aviso">Informe a marca e o modelo para poder pesquisar peças na Web para este veículo.</p>
+        {% endif %}
+        <form method="POST" action="{{ url_for('registrar_dados_veiculo', id=veiculo['id']) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="dado_marca">Marca</label>
+            <input type="text" id="dado_marca" name="marca" maxlength="{{ max_dado_veiculo }}" value="{{ veiculo['marca'] or '' }}">
+            <label for="dado_modelo">Modelo</label>
+            <input type="text" id="dado_modelo" name="modelo" maxlength="{{ max_dado_veiculo }}" value="{{ veiculo['modelo'] or '' }}">
+            <label for="dado_cor">Cor</label>
+            <input type="text" id="dado_cor" name="cor" maxlength="{{ max_dado_veiculo }}" value="{{ veiculo['cor'] or '' }}">
+            <label for="dado_ano">Ano</label>
+            <input type="text" id="dado_ano" name="ano" inputmode="numeric" maxlength="9" value="{{ veiculo['ano'] or '' }}">
+            <label for="dado_km">Quilometragem</label>
+            <input type="text" id="dado_km" name="quilometragem" maxlength="{{ max_dado_veiculo }}" value="{{ veiculo['quilometragem'] or '' }}">
+            <button type="submit">Salvar</button>
+        </form>
+    </details>
+    {% endif %}
     <div class="fotos-veiculo">
         {% if fotos %}
         {% if entrega %}<h3>Fotos da entrada do veículo (como o carro chegou)</h3>{% endif %}

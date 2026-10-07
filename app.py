@@ -63,7 +63,8 @@ TRAVADOS_APOS_ENTREGA = {"registrar_servico", "registrar_resolucao", "registrar_
                          "registrar_aprovacao", "registrar_prazo", "registrar_garantia", "fechar_entrega",
                          "adicionar_fotos", "excluir_foto", "trocar_foto",
                          "adicionar_fotos_problema", "excluir_foto_problema", "registrar_etapa",
-                         "usar_peca", "devolver_peca", "registrar_referencia"}
+                         "usar_peca", "devolver_peca", "registrar_referencia", "registrar_dados_veiculo"}
+MAX_DADO_VEICULO = 40                # letras de marca, modelo, cor e quilometragem do veículo
 MAX_PECA_BUSCA = 100                 # letras do nome da peça pesquisada na Web
 MAX_REFERENCIA = 300                 # letras da anotação "número original / onde comprar"
 # Sites onde a pesquisa de peça é aberta (em outra aba). {q} é o texto da pesquisa já codificado.
@@ -1389,7 +1390,7 @@ def pagina_veiculo(id, erros=None, dados=None):
         for p in db.execute("SELECT ep.* FROM entrega_pecas ep JOIN entrega_itens ei "
                             "ON ei.id = ep.entrega_item_id WHERE ei.entrega_id = ? ORDER BY ep.id", (entrega["id"],)):
             pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
-    return render_template("veiculo.html", sites_busca=SITES_BUSCA, max_peca_busca=MAX_PECA_BUSCA,
+    return render_template("veiculo.html", max_dado_veiculo=MAX_DADO_VEICULO, sites_busca=SITES_BUSCA, max_peca_busca=MAX_PECA_BUSCA,
                            max_referencia=MAX_REFERENCIA, pecas_servicos=pecas_servicos, itens_estoque=itens_estoque,
                            grupos_estoque=grupos_estoque,
                            pecas_entrega=pecas_entrega, etapa=etapa, etapas=ETAPAS, historico_etapas=historico_etapas,
@@ -1884,6 +1885,31 @@ def registrar_etapa(id):
 
     db.execute("INSERT INTO etapas (veiculo_id, etapa, registrado_por) VALUES (?, ?, ?)",
                (id, nova, g.usuario["nome"]))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/dados", methods=["POST"])
+def registrar_dados_veiculo(id):
+    """Dono e funcionário completam ou corrigem marca, modelo, cor, ano e quilometragem do veículo depois do
+    cadastro (a pesquisa de peça na Web precisa da marca e do modelo). Placa e responsável não mudam aqui.
+    Depois da entrega o cadastro fica travado. Se algum campo estiver inválido, nada é salvo."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    dados = {c: " ".join(request.form.get(c, "").split()) for c in ("marca", "modelo", "cor", "ano", "quilometragem")}
+    erros = []
+    for campo, rotulo in (("marca", "A marca"), ("modelo", "O modelo"), ("cor", "A cor"),
+                          ("quilometragem", "A quilometragem")):
+        if len(dados[campo]) > MAX_DADO_VEICULO:
+            erros.append(f"{rotulo} pode ter no máximo {MAX_DADO_VEICULO} letras.")
+    if dados["ano"]:
+        achou = re.search(r"\d{4}", dados["ano"])
+        if len(dados["ano"]) > 9 or not achou or not 1900 <= int(achou.group()) <= 2100:
+            erros.append("O ano deve ter 4 números, entre 1900 e 2100 (exemplo: 2012 ou 2012/2013).")
+    if erros:
+        return pagina_veiculo(id, erros)
+    db.execute("UPDATE veiculos SET marca = ?, modelo = ?, cor = ?, ano = ?, quilometragem = ? WHERE id = ?",
+               (dados["marca"], dados["modelo"], dados["cor"], dados["ano"], dados["quilometragem"], id))
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
 
