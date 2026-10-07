@@ -221,3 +221,5 @@ details.excluir-veiculo button:hover { background: #6e1616; }
 details.telefone-cliente { margin: 8px 0 16px; }
 a.botao.botao-whatsapp { background: #1e8e4f; color: #fff; }
 a.botao.botao-whatsapp:hover { background: #17703e; }
+td.problema .galeria-problema { margin-top: 8px; }
+td.problema details.fotos-problema { margin-top: 8px; font-size: 13px; }

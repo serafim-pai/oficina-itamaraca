@@ -136,7 +136,40 @@
         {% for s in servicos %}
         <tr>
             <td>{{ s['tipo'] }}</td>
-            <td>{{ s['problema'] }}</td>
+            <td class="problema">
+                {{ s['problema'] }}
+                {% set fotos_do_problema = fotos_problemas.get(s['id'], []) %}
+                {% if fotos_do_problema %}
+                <div class="galeria galeria-problema">
+                    {% for foto_id in fotos_do_problema %}
+                    <div class="foto-card">
+                        <a href="{{ url_for('foto', id=foto_id) }}" target="_blank" rel="noopener">
+                            <img src="{{ url_for('foto_miniatura', id=foto_id) }}" alt="Foto do problema: {{ s['problema'][:60] }}" loading="lazy">
+                        </a>
+                        {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
+                        <form method="POST" action="{{ url_for('excluir_foto_problema', id=veiculo['id'], servico_id=s['id'], foto_id=foto_id) }}"
+                              onsubmit="return confirm('Excluir esta foto do problema? Isso não pode ser desfeito.')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="botao-pequeno perigo">Excluir</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if not entrega and fotos_do_problema|length < max_fotos_problema %}
+                <details class="fotos-problema">
+                    <summary>📷 Anexar fotos</summary>
+                    <form method="POST" action="{{ url_for('adicionar_fotos_problema', id=veiculo['id'], servico_id=s['id']) }}"
+                          enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="file" name="fotos" accept="image/*" multiple aria-label="Fotos do problema">
+                        <span class="aviso">Até {{ max_fotos_problema }} fotos por problema, de {{ max_mb }} MB cada.</span>
+                        <button type="submit">Enviar fotos</button>
+                    </form>
+                </details>
+                {% endif %}
+            </td>
             <td class="resolucao">
                 {% if entrega %}
                 {{ s['como_resolver'] or '-' }}

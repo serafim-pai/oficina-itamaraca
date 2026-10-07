@@ -60,8 +60,10 @@ CONDICOES_PADRAO = (
 # Depois que o veículo é entregue, estas ações (envios de formulário) ficam bloqueadas.
 TRAVADOS_APOS_ENTREGA = {"registrar_servico", "registrar_resolucao", "registrar_valor", "excluir_servico",
                          "registrar_aprovacao", "registrar_prazo", "registrar_garantia", "fechar_entrega",
-                         "adicionar_fotos", "excluir_foto", "trocar_foto"}
+                         "adicionar_fotos", "excluir_foto", "trocar_foto",
+                         "adicionar_fotos_problema", "excluir_foto_problema"}
 MAX_FOTOS = 10                       # fotos por envio (no cadastro ou ao adicionar depois)
+MAX_FOTOS_PROBLEMA = 5               # fotos de um mesmo problema/serviço
 MAX_FOTOS_VEICULO = 20               # fotos de um veículo, no total
 MAX_BYTES_FOTO = 8 * 1024 * 1024     # tamanho máximo de cada foto enviada
 MAX_PIXELS_FOTO = 40_000_000         # evita imagens "bomba" que travariam o servidor
@@ -340,6 +342,9 @@ def init_db():
         db.execute("ALTER TABLE fotos ADD COLUMN momento TEXT NOT NULL DEFAULT 'ENTRADA'")
     if "entrega_desfeita_id" not in colunas_fotos:
         db.execute("ALTER TABLE fotos ADD COLUMN entrega_desfeita_id INTEGER")
+    # Fotos de um problema/serviço: momento PROBLEMA, ligadas ao serviço por "servico_id"
+    if "servico_id" not in colunas_fotos:
+        db.execute("ALTER TABLE fotos ADD COLUMN servico_id INTEGER")
     db.commit()
     db.close()
     os.makedirs(PASTA_FOTOS, exist_ok=True)
@@ -910,6 +915,71 @@ def adicionar_fotos(id):
     return redirect(url_for("ver_veiculo", id=id))
 
 
+def buscar_servico_do_veiculo(db, id, servico_id):
+    servico = db.execute("SELECT * FROM servicos WHERE id = ? AND veiculo_id = ?", (servico_id, id)).fetchone()
+    if not servico:
+        abort(404)
+    return servico
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/fotos", methods=["POST"])
+def adicionar_fotos_problema(id, servico_id):
+    """Anexa fotos a um problema registrado (mostram o que foi encontrado). Dono e funcionário podem.
+    Tudo ou nada: se uma foto for recusada, nenhuma é guardada."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    buscar_servico_do_veiculo(db, id, servico_id)
+    arquivos = [a for a in request.files.getlist("fotos") if a and a.filename]
+    existentes = db.execute("SELECT COUNT(*) FROM fotos WHERE servico_id = ? AND momento = 'PROBLEMA'",
+                            (servico_id,)).fetchone()[0]
+    erros, preparadas = [], []
+    if not arquivos:
+        erros.append("Escolha pelo menos uma foto para anexar ao problema.")
+    elif existentes + len(arquivos) > MAX_FOTOS_PROBLEMA:
+        erros.append(f"Cada problema pode ter no máximo {MAX_FOTOS_PROBLEMA} fotos (este já tem {existentes}).")
+    else:
+        for arquivo in arquivos:
+            erro_foto, pronta = preparar_foto(arquivo)
+            if erro_foto:
+                erros.append(erro_foto)
+            else:
+                preparadas.append(pronta)
+    if erros:
+        return pagina_veiculo(id, erros)
+
+    criados = []
+    try:
+        for grande, miniatura in preparadas:
+            codigo = gravar_arquivos_da_foto(grande, miniatura, criados)
+            cursor = db.execute("INSERT INTO fotos (veiculo_id, arquivo, momento, servico_id) "
+                                "VALUES (?, ?, 'PROBLEMA', ?)", (id, codigo, servico_id))
+            anotar_foto(db, id, cursor.lastrowid, "ADICIONADA")
+        db.commit()
+    except Exception:
+        db.rollback()
+        apagar_arquivos(criados)      # não deixa foto "órfã" no disco
+        raise
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/fotos/<int:foto_id>/excluir", methods=["POST"])
+def excluir_foto_problema(id, servico_id, foto_id):
+    """Só o dono apaga a foto de um problema. Fica o registro de quem e quando."""
+    so_dono()
+    db = get_db()
+    buscar_veiculo(db, id)
+    foto_do_problema = db.execute(
+        "SELECT * FROM fotos WHERE id = ? AND veiculo_id = ? AND servico_id = ? AND momento = 'PROBLEMA'",
+        (foto_id, id, servico_id)).fetchone()
+    if not foto_do_problema:
+        abort(404)
+    db.execute("DELETE FROM fotos WHERE id = ?", (foto_id,))
+    anotar_foto(db, id, foto_id, "EXCLUIDA")
+    db.commit()
+    apagar_arquivos_da_foto(foto_do_problema["arquivo"])      # só depois de gravar no banco
+    return redirect(url_for("ver_veiculo", id=id))
+
+
 def buscar_foto_do_veiculo(db, id, foto_id):
     """A foto de ENTRADA, desde que seja mesmo deste veículo (senão 404). As fotos da entrega são
     prova do estado em que o carro saiu e não podem ser trocadas nem excluídas."""
@@ -1103,6 +1173,9 @@ def pagina_veiculo(id, erros=None, dados=None):
     servicos = db.execute("SELECT * FROM servicos WHERE veiculo_id = ? ORDER BY id", (id,)).fetchall()
     fotos = [f["id"] for f in db.execute("SELECT id FROM fotos WHERE veiculo_id = ? AND momento = 'ENTRADA' ORDER BY id", (id,))]
     fotos_entrega = [f["id"] for f in db.execute("SELECT id FROM fotos WHERE veiculo_id = ? AND momento = 'ENTREGA' ORDER BY id", (id,))]
+    fotos_problemas = {}                 # fotos de cada problema, agrupadas pelo serviço
+    for f in db.execute("SELECT id, servico_id FROM fotos WHERE veiculo_id = ? AND momento = 'PROBLEMA' ORDER BY id", (id,)):
+        fotos_problemas.setdefault(f["servico_id"], []).append(f["id"])
     fotos_desfeitas = {}                 # fotos de entregas desfeitas, agrupadas pela entrega a que pertenciam
     for f in db.execute("SELECT id, entrega_desfeita_id FROM fotos WHERE veiculo_id = ? AND momento = 'ENTREGA_DESFEITA' ORDER BY id", (id,)):
         fotos_desfeitas.setdefault(f["entrega_desfeita_id"], []).append(f["id"])
@@ -1129,7 +1202,8 @@ def pagina_veiculo(id, erros=None, dados=None):
                            historico_fotos=historico_fotos, max_fotos=MAX_FOTOS, max_fotos_veiculo=MAX_FOTOS_VEICULO,
                            max_mb=MAX_BYTES_FOTO // (1024 * 1024),
                            desfeitas=desfeitas, max_motivo_desfazer=MAX_MOTIVO_DESFAZER,
-                           max_motivo_excluir=MAX_MOTIVO_EXCLUIR, formatar_telefone=formatar_telefone,
+                           max_motivo_excluir=MAX_MOTIVO_EXCLUIR, fotos_problemas=fotos_problemas,
+                           max_fotos_problema=MAX_FOTOS_PROBLEMA, formatar_telefone=formatar_telefone,
                            link_whatsapp=(link_whatsapp(veiculo, servicos, total_centavos)
                                           if orcamento_completo and not entrega else None),
                            limites=limites_de_garantia(db), texto_limite=texto_limite,
@@ -1590,8 +1664,14 @@ def excluir_servico(id, servico_id):
     """Só o dono apaga um problema registrado por engano."""
     so_dono()
     db = get_db()
+    codigos = [f["arquivo"] for f in db.execute(
+        "SELECT arquivo FROM fotos WHERE servico_id = ? AND veiculo_id = ? AND momento = 'PROBLEMA'",
+        (servico_id, id))]
+    db.execute("DELETE FROM fotos WHERE servico_id = ? AND veiculo_id = ? AND momento = 'PROBLEMA'", (servico_id, id))
     db.execute("DELETE FROM servicos WHERE id = ? AND veiculo_id = ?", (servico_id, id))
     db.commit()
+    for codigo in codigos:           # os arquivos das fotos do problema só somem depois de gravar no banco
+        apagar_arquivos_da_foto(codigo)
     return redirect(url_for("ver_veiculo", id=id))
 
 
