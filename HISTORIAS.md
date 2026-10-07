@@ -257,3 +257,7 @@ Buscar na lista de veículos:
 - Não importa maiúscula, acento, hífen nem espaço (ABC-1D23 acha ABC1D23; "joao" acha JOÃO). Vale um pedaço
   da placa ou do nome. Se forem digitadas várias palavras, todas precisam combinar com o mesmo veículo.
 - A tela mostra quantos veículos foram achados e tem "Limpar busca".
+
+A lista de veículos também aparece como **cartões** (um por veículo, com a placa em destaque no topo, depois
+o responsável, as fotos, a situação do orçamento, da etapa e da entrega, e os dados do carro), sem rolagem
+para o lado. Nada mudou no que cada informação mostra.

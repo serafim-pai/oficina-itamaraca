@@ -252,15 +252,22 @@ td.problema { min-width: 220px; }
 td.problema details.editar-problema textarea { min-height: 90px; }
 
 /* Cada serviço vira um cartão (campos empilhados), em vez de uma tabela larga com rolagem lateral */
-table.servicos-cartoes, table.servicos-cartoes tbody { display: block; width: 100%; border: none; overflow: visible; }
-table.servicos-cartoes tr:first-child { display: none; }
-table.servicos-cartoes tr { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px 18px;
+table.tabela-cartoes, table.tabela-cartoes tbody { display: block; width: 100%; border: none; overflow: visible; }
+table.tabela-cartoes tr:first-child { display: none; }
+table.tabela-cartoes tr { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px 18px;
     border: 1px solid #c9d3e3; border-radius: 6px; padding: 14px; margin-bottom: 16px; background: #fff; }
-table.servicos-cartoes td { display: block; border: none; padding: 0; min-width: 0; }
-table.servicos-cartoes td::before { content: attr(data-label); display: block; margin-bottom: 4px; font-size: 12px;
+table.tabela-cartoes td { display: block; border: none; padding: 0; min-width: 0; }
+table.tabela-cartoes td::before { content: attr(data-label); display: block; margin-bottom: 4px; font-size: 12px;
     font-weight: bold; text-transform: uppercase; color: #1a3c6e; }
-table.servicos-cartoes td[data-label=""]::before { display: none; }
+table.tabela-cartoes td[data-label=""]::before { display: none; }
 table.servicos-cartoes td.problema { grid-column: 1 / -1; font-size: 16px; }
 table.servicos-cartoes td.problema details { font-size: 13px; }
 table.servicos-cartoes td.valor input, table.servicos-cartoes td.garantia input { width: 100px; }
 table.servicos-cartoes td.acoes { grid-column: 1 / -1; }
+
+/* Lista de veículos: cada veículo é um cartão, com a placa em destaque no topo */
+table.veiculos-cartoes tr { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px 14px; }
+table.veiculos-cartoes td.placa { grid-column: 1 / -1; order: -2; font-size: 22px; font-weight: bold; }
+table.veiculos-cartoes td.responsavel { grid-column: 1 / -1; order: -1; font-size: 16px; }
+table.veiculos-cartoes td.fotos { grid-column: 1 / -1; }
+table.veiculos-cartoes td.status { grid-column: span 2; }

@@ -87,7 +87,7 @@
     {% endif %}
     {% if veiculos %}
     <div class="tabela-rolavel">
-    <table>
+    <table class="tabela-cartoes veiculos-cartoes">
         <tr>
             <th>Responsável</th>
             <th>Placa</th>
@@ -104,9 +104,9 @@
         </tr>
         {% for v in veiculos %}
         <tr>
-            <td>{{ v['responsavel'] }}</td>
-            <td><a href="{{ url_for('ver_veiculo', id=v['id']) }}">{{ v['placa'] }}</a></td>
-            <td class="fotos">
+            <td class="responsavel" data-label="Responsável">{{ v['responsavel'] or '-' }}</td>
+            <td class="placa" data-label=""><a href="{{ url_for('ver_veiculo', id=v['id']) }}">{{ v['placa'] }}</a></td>
+            <td class="fotos" data-label="Fotos">
                 {% for foto_id in fotos.get(v['id'], []) %}
                 <a href="{{ url_for('foto', id=foto_id) }}" target="_blank" rel="noopener">
                     <img src="{{ url_for('foto_miniatura', id=foto_id) }}" alt="Foto do veículo {{ v['placa'] }}" loading="lazy">
@@ -114,17 +114,17 @@
                 {% else %}-{% endfor %}
             </td>
             {% set sit = situacoes[v['id']] %}
-            <td><span class="selo selo-{{ sit[0]|lower|replace('_', '-') }}">{{ sit[1] }}</span></td>
+            <td class="status" data-label="Orçamento"><span class="selo selo-{{ sit[0]|lower|replace('_', '-') }}">{{ sit[1] }}</span></td>
             {% set et = etapas[v['id']] %}
-            <td><span class="selo selo-{{ et[0]|lower|replace('_', '-') }}">{{ et[1] }}</span></td>
+            <td class="status" data-label="Etapa"><span class="selo selo-{{ et[0]|lower|replace('_', '-') }}">{{ et[1] }}</span></td>
             {% set pz = prazos[v['id']] %}
-            <td><span class="selo selo-{{ pz[0]|lower|replace('_', '-') }}">{{ pz[1] }}</span></td>
-            <td>{{ v['marca'] }}</td>
-            <td>{{ v['modelo'] }}</td>
-            <td>{{ v['cor'] }}</td>
-            <td>{{ v['ano'] }}</td>
-            <td>{{ v['quilometragem'] }}</td>
-            <td>{{ 'Sim' if v['documento_deixado'] else 'Não' }}</td>
+            <td class="status" data-label="Entrega"><span class="selo selo-{{ pz[0]|lower|replace('_', '-') }}">{{ pz[1] }}</span></td>
+            <td data-label="Marca">{{ v['marca'] or '-' }}</td>
+            <td data-label="Modelo">{{ v['modelo'] or '-' }}</td>
+            <td data-label="Cor">{{ v['cor'] or '-' }}</td>
+            <td data-label="Ano">{{ v['ano'] or '-' }}</td>
+            <td data-label="Km">{{ v['quilometragem'] or '-' }}</td>
+            <td data-label="Documento deixado">{{ 'Sim' if v['documento_deixado'] else 'Não' }}</td>
         </tr>
         {% endfor %}
     </table>
