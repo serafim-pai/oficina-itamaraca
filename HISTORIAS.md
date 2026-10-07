@@ -9,6 +9,7 @@
 6. Registrar a aprovação do cliente
 7. Definir o prazo de entrega
 8. Registrar a garantia
+9. Controlar o estoque de peças e tintas
 
 ## História 1 - Cadastrar o veículo
 Como dono da oficina, quero cadastrar o veículo com o nome do
@@ -177,3 +178,30 @@ Desfazer a entrega:
   fechar a entrega de novo, sai um comprovante novo.
 - Se o valor de um serviço mudar depois de desfazer, a aprovação do cliente
   deixa de valer e é preciso aprovar de novo antes de fechar a entrega.
+
+## História 9 - Controlar o estoque de peças e tintas
+Como dono ou funcionário da oficina, quero cadastrar as peças e tintas que tenho, usar no serviço e ver o
+preço entrar no orçamento, para saber o que tenho, o que está acabando e cobrar certo.
+
+Combinado com o dono (ainda a confirmar com ele):
+- Dono e funcionário cadastram itens, dão entrada, ajustam a contagem e usam em serviços.
+  Só o dono tira um item de uso (ele some das listas, mas o histórico fica).
+- Tudo é contado em **unidades inteiras** (tinta por lata ou frasco). Cada item tem nome, tipo (peça ou
+  tinta), quantidade, estoque mínimo, custo e preço de venda. Não há dois itens com o mesmo nome e tipo.
+- Quando a quantidade chega ao mínimo, a tela do estoque avisa "Estoque baixo"; zerado mostra "Acabou".
+- Toda mudança de quantidade (estoque inicial, entrada, uso, devolução, ajuste) fica numa lista que nunca
+  é apagada: quem fez, quando, quanto, saldo depois, veículo e observação. O ajuste exige motivo.
+- Usar um item em um serviço baixa o estoque e soma `quantidade x preço` ao valor do serviço. O sistema não
+  deixa usar mais do que existe. O nome, o preço e o custo da hora do uso ficam guardados: mudar o preço
+  no estoque depois não mexe em orçamentos já feitos.
+- Tirar a peça do serviço, excluir o serviço ou excluir o veículo devolve a quantidade ao estoque.
+- Peças entram no total do orçamento, no texto do WhatsApp e na aprovação do cliente: se uma peça for
+  colocada ou tirada depois da aprovação, o orçamento "mudou" e precisa de nova decisão. Aprovações antigas
+  (sem peças) continuam valendo.
+- Ao fechar a entrega, as peças de cada serviço são copiadas para o fechamento e aparecem no comprovante
+  (serviço + peças = valor do item). Depois da entrega não se usa nem se devolve peça.
+- Ao desfazer a entrega, a cópia das peças vai para o histórico junto com o valor; as peças continuam
+  usadas (o estoque não volta) e o cadastro destrava.
+
+Limites conhecidos: o valor do serviço (mão de obra) continua sendo obrigatório e maior que zero, mesmo
+para serviço só de peça. Não há controle de fornecedor nem relatório de lucro ainda.

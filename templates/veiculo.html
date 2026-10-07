@@ -127,7 +127,8 @@
             <th>Tipo</th>
             <th>Problema</th>
             <th>Como resolver</th>
-            <th>Valor</th>
+            <th>Valor do serviço</th>
+            <th>Peças e tintas</th>
             <th>Garantia</th>
             <th>Registrado por</th>
             <th>Data</th>
@@ -193,6 +194,40 @@
                 </form>
                 {% else %}
                 {{ formatar_dinheiro(s['valor_centavos']) if s['valor_centavos'] is not none else '-' }}
+                {% endif %}
+            </td>
+            <td class="pecas">
+                {% for p in pecas_servicos.get(s['id'], []) %}
+                <div class="peca-usada">
+                    {{ p['quantidade'] }}x {{ p['nome'] }} - {{ formatar_dinheiro(p['quantidade'] * p['preco_centavos']) }}
+                    {% if not entrega %}
+                    <form method="POST" action="{{ url_for('devolver_peca', id=veiculo['id'], servico_id=s['id'], peca_id=p['id']) }}"
+                          onsubmit="return confirm('Tirar esta peça do serviço? Ela volta para o estoque.')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="botao-pequeno">Tirar</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% else %}-{% endfor %}
+                {% if s['pecas_centavos'] %}<strong>Peças: {{ formatar_dinheiro(s['pecas_centavos']) }}</strong>{% endif %}
+                {% if not entrega %}
+                {% if itens_estoque %}
+                <details class="usar-peca">
+                    <summary>➕ Usar do estoque</summary>
+                    <form method="POST" action="{{ url_for('usar_peca', id=veiculo['id'], servico_id=s['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <select name="item_id" aria-label="Peça ou tinta">
+                            {% for i in itens_estoque %}
+                            <option value="{{ i['id'] }}">{{ i['nome'] }} ({{ i['tipo']|lower }}, {{ i['quantidade'] }} em estoque) - {{ formatar_dinheiro(i['preco_centavos']) }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" name="quantidade" inputmode="numeric" maxlength="6" value="1" aria-label="Quantidade usada">
+                        <button type="submit">Usar</button>
+                    </form>
+                </details>
+                {% else %}
+                <span class="aviso">Nada disponível no <a href="{{ url_for('estoque') }}">estoque</a>.</span>
+                {% endif %}
                 {% endif %}
             </td>
             <td class="garantia">

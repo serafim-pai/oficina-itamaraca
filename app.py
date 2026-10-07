@@ -61,7 +61,8 @@ CONDICOES_PADRAO = (
 TRAVADOS_APOS_ENTREGA = {"registrar_servico", "registrar_resolucao", "registrar_valor", "excluir_servico",
                          "registrar_aprovacao", "registrar_prazo", "registrar_garantia", "fechar_entrega",
                          "adicionar_fotos", "excluir_foto", "trocar_foto",
-                         "adicionar_fotos_problema", "excluir_foto_problema", "registrar_etapa"}
+                         "adicionar_fotos_problema", "excluir_foto_problema", "registrar_etapa",
+                         "usar_peca", "devolver_peca"}
 MAX_FOTOS = 10                       # fotos por envio (no cadastro ou ao adicionar depois)
 MAX_FOTOS_PROBLEMA = 5               # fotos de um mesmo problema/serviço
 MAX_FOTOS_VEICULO = 20               # fotos de um veículo, no total
@@ -70,6 +71,10 @@ MAX_PIXELS_FOTO = 40_000_000         # evita imagens "bomba" que travariam o ser
 LADO_FOTO = 1600                     # a foto guardada é reduzida para caber nesse tamanho
 LADO_MINIATURA = 320
 FORMATOS_DE_FOTO = {"JPEG", "PNG", "WEBP", "GIF"}
+TIPOS_ESTOQUE = ("PEÇA", "TINTA")    # história 9: estoque de peças e tintas (sempre em unidades inteiras)
+MAX_NOME_ITEM = 80                   # letras do nome de um item do estoque
+MAX_QUANTIDADE = 100_000             # limite de sanidade para quantidades de estoque
+MAX_MOTIVO_ESTOQUE = 200             # letras da observação de uma movimentação
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 60 * 1024 * 1024     # tamanho máximo de um envio inteiro
@@ -308,6 +313,71 @@ def init_db():
         )
         """
     )
+    # História 9: estoque de peças e tintas. Cada item guarda quantidade (inteira), mínimo para o aviso de estoque
+    # baixo, custo e preço de venda (em centavos). Toda mudança de quantidade vira uma linha em
+    # estoque_movimentos (nunca apagada): quem, quando e por quê.
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS estoque_itens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            tipo TEXT NOT NULL,
+            quantidade INTEGER NOT NULL DEFAULT 0,
+            minimo INTEGER NOT NULL DEFAULT 0,
+            custo_centavos INTEGER NOT NULL DEFAULT 0,
+            preco_centavos INTEGER NOT NULL,
+            ativo INTEGER NOT NULL DEFAULT 1,
+            criado_por TEXT,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS estoque_movimentos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER NOT NULL,
+            tipo TEXT NOT NULL,
+            variacao INTEGER NOT NULL,
+            saldo_apos INTEGER NOT NULL,
+            motivo TEXT,
+            veiculo_id INTEGER,
+            servico_id INTEGER,
+            registrado_por TEXT,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    # Peças/tintas usadas em um serviço: guardam nome, preço e custo da hora do uso (mudar o preço do
+    # estoque depois não mexe no orçamento já feito).
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS servico_pecas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            servico_id INTEGER NOT NULL,
+            veiculo_id INTEGER NOT NULL,
+            item_id INTEGER NOT NULL,
+            nome TEXT NOT NULL,
+            quantidade INTEGER NOT NULL,
+            preco_centavos INTEGER NOT NULL,
+            custo_centavos INTEGER NOT NULL,
+            registrado_por TEXT,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    # Cópia das peças de cada serviço na hora da entrega (o comprovante sai daqui)
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS entrega_pecas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entrega_item_id INTEGER NOT NULL,
+            nome TEXT NOT NULL,
+            quantidade INTEGER NOT NULL,
+            preco_centavos INTEGER NOT NULL
+        )
+        """
+    )
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS usuarios (
@@ -344,6 +414,12 @@ def init_db():
         db.execute("ALTER TABLE servicos ADD COLUMN garantia_valor INTEGER")
     if "garantia_unidade" not in colunas:
         db.execute("ALTER TABLE servicos ADD COLUMN garantia_unidade TEXT")
+    # História 9: soma (em centavos) das peças usadas no serviço; entra no orçamento junto com o valor do serviço
+    if "pecas_centavos" not in colunas:
+        db.execute("ALTER TABLE servicos ADD COLUMN pecas_centavos INTEGER NOT NULL DEFAULT 0")
+    for tabela in ("entrega_itens", "entrega_itens_desfeitos"):
+        if "pecas_centavos" not in [c[1] for c in db.execute(f"PRAGMA table_info({tabela})")]:
+            db.execute(f"ALTER TABLE {tabela} ADD COLUMN pecas_centavos INTEGER NOT NULL DEFAULT 0")
     # Telefone (WhatsApp) do cliente, só dígitos com DDD; opcional
     colunas_veiculos = [c[1] for c in db.execute("PRAGMA table_info(veiculos)")]
     if "telefone" not in colunas_veiculos:
@@ -588,7 +664,9 @@ def alternar_usuario(id):
 def assinatura_orcamento(servicos):
     """Impressão digital do orçamento: muda se um serviço entrar, sair ou mudar de valor.
     Serve para saber se a aprovação do cliente ainda vale para o orçamento de hoje."""
-    texto = "|".join(f"{s['id']}:{s['valor_centavos']}" for s in sorted(servicos, key=lambda s: s["id"]))
+    # As peças só entram na conta quando existem: assim as aprovações antigas continuam valendo.
+    texto = "|".join(f"{s['id']}:{s['valor_centavos']}" + (f"+{s['pecas_centavos']}" if s["pecas_centavos"] else "")
+                     for s in sorted(servicos, key=lambda s: s["id"]))
     return hashlib.sha256(texto.encode()).hexdigest()[:16]
 
 
@@ -611,7 +689,7 @@ def situacao_aprovacao(servicos, ultima):
 def situacoes_dos_veiculos(db, veiculos):
     """Situação da aprovação de cada veículo da lista, com poucas consultas ao banco."""
     servicos = {}
-    for s in db.execute("SELECT id, veiculo_id, valor_centavos FROM servicos ORDER BY id"):
+    for s in db.execute("SELECT id, veiculo_id, valor_centavos, pecas_centavos FROM servicos ORDER BY id"):
         servicos.setdefault(s["veiculo_id"], []).append(s)
     ultimas = {}
     for a in db.execute("SELECT veiculo_id, decisao, assinatura FROM aprovacoes ORDER BY id"):
@@ -1122,7 +1200,7 @@ def link_whatsapp(veiculo, servicos, total_centavos):
     fim = (f"\n*Total: {formatar_dinheiro(total_centavos)}*\n\n"
            "Você aprova o orçamento? Responda *APROVADO* ou *RECUSADO*.")
     linhas = [f"• {s['tipo'].capitalize()}: {' '.join(s['problema'].split())[:100]} - "
-              f"{formatar_dinheiro(s['valor_centavos'])}" for s in servicos]
+              f"{formatar_dinheiro(s['valor_centavos'] + s['pecas_centavos'])}" for s in servicos]
     incluidas = list(linhas)
     while True:
         mais = len(linhas) - len(incluidas)
@@ -1243,7 +1321,12 @@ def pagina_veiculo(id, erros=None, dados=None):
     fotos_desfeitas = {}                 # fotos de entregas desfeitas, agrupadas pela entrega a que pertenciam
     for f in db.execute("SELECT id, entrega_desfeita_id FROM fotos WHERE veiculo_id = ? AND momento = 'ENTREGA_DESFEITA' ORDER BY id", (id,)):
         fotos_desfeitas.setdefault(f["entrega_desfeita_id"], []).append(f["id"])
-    total_centavos = sum(s["valor_centavos"] or 0 for s in servicos)
+    total_centavos = sum((s["valor_centavos"] or 0) + s["pecas_centavos"] for s in servicos)
+    pecas_servicos = {}                  # peças usadas em cada serviço
+    for p in db.execute("SELECT * FROM servico_pecas WHERE veiculo_id = ? ORDER BY id", (id,)):
+        pecas_servicos.setdefault(p["servico_id"], []).append(p)
+    itens_estoque = db.execute("SELECT * FROM estoque_itens WHERE ativo = 1 AND quantidade > 0 "
+                               "ORDER BY tipo, nome").fetchall()
     faltam = sum(1 for s in servicos if s["valor_centavos"] is None)
     orcamento_completo = bool(servicos) and faltam == 0
     aprovacoes = db.execute("SELECT * FROM aprovacoes WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
@@ -1263,7 +1346,13 @@ def pagina_veiculo(id, erros=None, dados=None):
     historico_fotos = db.execute("SELECT * FROM fotos_historico WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
     historico_etapas = db.execute("SELECT * FROM etapas WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
     etapa = etapa_atual(db, id)
-    return render_template("veiculo.html", etapa=etapa, etapas=ETAPAS, historico_etapas=historico_etapas,
+    pecas_entrega = {}                   # peças de cada item da entrega fechada
+    if entrega:
+        for p in db.execute("SELECT ep.* FROM entrega_pecas ep JOIN entrega_itens ei "
+                            "ON ei.id = ep.entrega_item_id WHERE ei.entrega_id = ? ORDER BY ep.id", (entrega["id"],)):
+            pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
+    return render_template("veiculo.html", pecas_servicos=pecas_servicos, itens_estoque=itens_estoque,
+                           pecas_entrega=pecas_entrega, etapa=etapa, etapas=ETAPAS, historico_etapas=historico_etapas,
                            proximas_etapas=MUDANCAS_DE_ETAPA[etapa],
                            link_whatsapp_pronto=(link_whatsapp_pronto(veiculo)
                                                  if etapa == "PRONTO" and not entrega else None), veiculo=veiculo, servicos=servicos, fotos=fotos,
@@ -1569,12 +1658,15 @@ def desfazer_entrega(id):
              entrega["criado_em"], motivo, g.usuario["nome"]))
         db.execute(
             "INSERT INTO entrega_itens_desfeitos (entrega_desfeita_id, tipo, problema, como_resolver, valor_centavos, "
-            "garantia_valor, garantia_unidade, garantia_ate) SELECT ?, tipo, problema, como_resolver, valor_centavos, "
-            "garantia_valor, garantia_unidade, garantia_ate FROM entrega_itens WHERE entrega_id = ? ORDER BY id",
+            "garantia_valor, garantia_unidade, garantia_ate, pecas_centavos) SELECT ?, tipo, problema, como_resolver, "
+            "valor_centavos, garantia_valor, garantia_unidade, garantia_ate, pecas_centavos "
+            "FROM entrega_itens WHERE entrega_id = ? ORDER BY id",
             (cursor.lastrowid, entrega["id"]))
         # As fotos da entrega não são apagadas: ficam guardadas, ligadas à entrega desfeita
         db.execute("UPDATE fotos SET momento = 'ENTREGA_DESFEITA', entrega_desfeita_id = ? "
                    "WHERE veiculo_id = ? AND momento = 'ENTREGA'", (cursor.lastrowid, id))
+        db.execute("DELETE FROM entrega_pecas WHERE entrega_item_id IN "
+                   "(SELECT id FROM entrega_itens WHERE entrega_id = ?)", (entrega["id"],))
         db.execute("DELETE FROM entrega_itens WHERE entrega_id = ?", (entrega["id"],))
         db.execute("DELETE FROM entregas WHERE id = ?", (entrega["id"],))
         db.commit()
@@ -1627,7 +1719,7 @@ def fechar_entrega(id):
             erros.append("Por segurança do navegador, as fotos precisam ser escolhidas de novo.")
         return pagina_veiculo(id, erros, {"condicoes": condicoes})
 
-    total = sum(s["valor_centavos"] for s in servicos)
+    total = sum(s["valor_centavos"] + s["pecas_centavos"] for s in servicos)
     criados = []
     try:
         cursor = db.execute("INSERT INTO entregas (veiculo_id, data_entrega, condicoes, total_centavos, entregue_por) "
@@ -1635,10 +1727,15 @@ def fechar_entrega(id):
                             (id, hoje.isoformat(), condicoes or None, total, g.usuario["nome"]))
         for s in servicos:
             ate = fim_da_garantia(hoje, s["garantia_valor"], s["garantia_unidade"])
-            db.execute("INSERT INTO entrega_itens (entrega_id, servico_id, tipo, problema, como_resolver, "
-                       "valor_centavos, garantia_valor, garantia_unidade, garantia_ate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                       (cursor.lastrowid, s["id"], s["tipo"], s["problema"], s["como_resolver"], s["valor_centavos"],
-                        s["garantia_valor"], s["garantia_unidade"], ate.isoformat() if ate else None))
+            item = db.execute("INSERT INTO entrega_itens (entrega_id, servico_id, tipo, problema, como_resolver, "
+                              "valor_centavos, garantia_valor, garantia_unidade, garantia_ate, pecas_centavos) "
+                              "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                              (cursor.lastrowid, s["id"], s["tipo"], s["problema"], s["como_resolver"],
+                               s["valor_centavos"], s["garantia_valor"], s["garantia_unidade"],
+                               ate.isoformat() if ate else None, s["pecas_centavos"]))
+            db.execute("INSERT INTO entrega_pecas (entrega_item_id, nome, quantidade, preco_centavos) "
+                       "SELECT ?, nome, quantidade, preco_centavos FROM servico_pecas WHERE servico_id = ? ORDER BY id",
+                       (item.lastrowid, s["id"]))
         guardar_fotos(db, id, fotos_entrega, criados, momento="ENTREGA")
         db.commit()
     except sqlite3.IntegrityError:      # dois cliques ao mesmo tempo: só um fecha a entrega
@@ -1666,7 +1763,11 @@ def comprovante(id):
     aprovacao = db.execute("SELECT * FROM aprovacoes WHERE veiculo_id = ? ORDER BY id DESC LIMIT 1", (id,)).fetchone()
     fotos_entrega = [f["id"] for f in db.execute(
         "SELECT id FROM fotos WHERE veiculo_id = ? AND momento = 'ENTREGA' ORDER BY id", (id,))]
-    return render_template("comprovante.html", veiculo=veiculo, entrega=entrega, itens=itens, aprovacao=aprovacao,
+    pecas_entrega = {}
+    for p in db.execute("SELECT ep.* FROM entrega_pecas ep JOIN entrega_itens ei ON ei.id = ep.entrega_item_id "
+                        "WHERE ei.entrega_id = ? ORDER BY ep.id", (entrega["id"],)):
+        pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
+    return render_template("comprovante.html", pecas_entrega=pecas_entrega, veiculo=veiculo, entrega=entrega, itens=itens, aprovacao=aprovacao,
                            fotos_entrega=fotos_entrega,
                            formatar_data=formatar_data, formatar_dinheiro=formatar_dinheiro,
                            texto_garantia=texto_garantia, nomes_formas=NOMES_FORMAS_APROVACAO)
@@ -1746,6 +1847,7 @@ def excluir_veiculo(id):
         db.execute("INSERT INTO veiculos_excluidos (veiculo_id, placa, responsavel, motivo, excluido_por) "
                    "VALUES (?, ?, ?, ?, ?)",
                    (id, veiculo["placa"], veiculo["responsavel"], motivo, g.usuario["nome"]))
+        devolver_pecas(db, "veiculo_id = ?", (id,), "Veículo excluído")
         for tabela in ("fotos", "fotos_historico", "servicos", "aprovacoes", "prazos", "etapas"):
             db.execute(f"DELETE FROM {tabela} WHERE veiculo_id = ?", (id,))
         db.execute("DELETE FROM veiculos WHERE id = ?", (id,))
@@ -1766,11 +1868,246 @@ def excluir_servico(id, servico_id):
     codigos = [f["arquivo"] for f in db.execute(
         "SELECT arquivo FROM fotos WHERE servico_id = ? AND veiculo_id = ? AND momento = 'PROBLEMA'",
         (servico_id, id))]
+    devolver_pecas(db, "servico_id = ? AND veiculo_id = ?", (servico_id, id), "Serviço excluído")
     db.execute("DELETE FROM fotos WHERE servico_id = ? AND veiculo_id = ? AND momento = 'PROBLEMA'", (servico_id, id))
     db.execute("DELETE FROM servicos WHERE id = ? AND veiculo_id = ?", (servico_id, id))
     db.commit()
     for codigo in codigos:           # os arquivos das fotos do problema só somem depois de gravar no banco
         apagar_arquivos_da_foto(codigo)
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+# ---------- ESTOQUE DE PEÇAS E TINTAS (história 9) ----------
+
+NOMES_MOVIMENTO = {"INICIAL": "Estoque inicial", "ENTRADA": "Entrada", "SAIDA": "Uso em serviço",
+                   "DEVOLUCAO": "Devolvida ao estoque", "AJUSTE": "Ajuste"}
+
+
+def interpretar_quantidade(texto, minimo=1):
+    """Número inteiro (só dígitos) entre 'minimo' e MAX_QUANTIDADE; devolve None se não servir."""
+    texto = texto.strip()
+    if not (texto.isascii() and texto.isdigit()) or len(texto) > 7:
+        return None
+    numero = int(texto)
+    return numero if minimo <= numero <= MAX_QUANTIDADE else None
+
+
+def mover_estoque(db, item_id, variacao, tipo, motivo=None, veiculo_id=None, servico_id=None):
+    """Soma 'variacao' (positiva ou negativa) à quantidade do item e anota a movimentação.
+    Não deixa o estoque ficar negativo: devolve False e não muda nada nesse caso."""
+    cursor = db.execute("UPDATE estoque_itens SET quantidade = quantidade + ? WHERE id = ? AND quantidade + ? >= 0",
+                        (variacao, item_id, variacao))
+    if cursor.rowcount == 0:
+        return False
+    saldo = db.execute("SELECT quantidade FROM estoque_itens WHERE id = ?", (item_id,)).fetchone()[0]
+    db.execute("INSERT INTO estoque_movimentos (item_id, tipo, variacao, saldo_apos, motivo, veiculo_id, servico_id, "
+               "registrado_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+               (item_id, tipo, variacao, saldo, motivo, veiculo_id, servico_id, g.usuario["nome"]))
+    return True
+
+
+def recalcular_pecas(db, servico_id):
+    """Atualiza a soma (em centavos) das peças usadas em um serviço."""
+    db.execute("UPDATE servicos SET pecas_centavos = COALESCE((SELECT SUM(quantidade * preco_centavos) "
+               "FROM servico_pecas WHERE servico_id = servicos.id), 0) WHERE id = ?", (servico_id,))
+
+
+def devolver_pecas(db, condicao, parametros, motivo):
+    """Devolve ao estoque as peças usadas nos serviços que casam com a condição (e apaga o uso delas).
+    Usado quando um serviço ou um veículo é excluído: a peça não foi gasta, volta para a prateleira."""
+    for p in db.execute(f"SELECT * FROM servico_pecas WHERE {condicao}", parametros).fetchall():
+        mover_estoque(db, p["item_id"], p["quantidade"], "DEVOLUCAO", motivo, p["veiculo_id"], p["servico_id"])
+    db.execute(f"DELETE FROM servico_pecas WHERE {condicao}", parametros)
+
+
+def pagina_estoque(erros=None, dados=None, status=200):
+    db = get_db()
+    itens = db.execute("SELECT * FROM estoque_itens WHERE ativo = 1 ORDER BY tipo, nome").fetchall()
+    inativos = db.execute("SELECT * FROM estoque_itens WHERE ativo = 0 ORDER BY tipo, nome").fetchall()
+    movimentos = db.execute(
+        "SELECT m.*, i.nome, v.placa FROM estoque_movimentos m JOIN estoque_itens i ON i.id = m.item_id "
+        "LEFT JOIN veiculos v ON v.id = m.veiculo_id ORDER BY m.id DESC LIMIT 40").fetchall()
+    valor_custo = sum(i["quantidade"] * i["custo_centavos"] for i in itens)
+    valor_venda = sum(i["quantidade"] * i["preco_centavos"] for i in itens)
+    return render_template("estoque.html", itens=itens, inativos=inativos, movimentos=movimentos,
+                           valor_custo=valor_custo, valor_venda=valor_venda, tipos=TIPOS_ESTOQUE,
+                           nomes_movimento=NOMES_MOVIMENTO, formatar_dinheiro=formatar_dinheiro,
+                           max_nome=MAX_NOME_ITEM, max_quantidade=MAX_QUANTIDADE, max_motivo=MAX_MOTIVO_ESTOQUE,
+                           erros=erros or [], dados=dados or {}), status
+
+
+@app.route("/estoque")
+def estoque():
+    return pagina_estoque()
+
+
+def ler_dados_do_item(db, item_id=None, com_quantidade=False):
+    """Lê e confere o formulário de um item do estoque. Devolve (erros, dados)."""
+    nome = " ".join(request.form.get("nome", "").split())
+    tipo = request.form.get("tipo", "").strip().upper()
+    texto_custo = request.form.get("custo", "").strip()
+    custo = 0 if not texto_custo else interpretar_valor(texto_custo)
+    preco = interpretar_valor(request.form.get("preco", ""))
+    minimo = 0 if not request.form.get("minimo", "").strip() else interpretar_quantidade(request.form["minimo"], 0)
+    quantidade = 0
+    erros = []
+    if sum(1 for letra in nome if letra.isalnum()) < 2:
+        erros.append("Informe o nome do item (exemplo: Pastilha de freio dianteira).")
+    elif len(nome) > MAX_NOME_ITEM:
+        erros.append(f"O nome pode ter no máximo {MAX_NOME_ITEM} letras.")
+    if tipo not in TIPOS_ESTOQUE:
+        erros.append("Escolha se o item é peça ou tinta.")
+    if com_quantidade and request.form.get("quantidade", "").strip():
+        quantidade = interpretar_quantidade(request.form["quantidade"], 0)
+        if quantidade is None:
+            erros.append(f"A quantidade deve ser um número inteiro de 0 a {MAX_QUANTIDADE}.")
+    if minimo is None:
+        erros.append(f"O estoque mínimo deve ser um número inteiro de 0 a {MAX_QUANTIDADE}.")
+    if custo is None:
+        erros.append("O custo deve ser um valor válido (exemplo: 35,00) ou ficar vazio.")
+    if preco is None:
+        erros.append("Informe o preço de venda (exemplo: 60,00).")
+    if not erros:
+        repetido = db.execute("SELECT 1 FROM estoque_itens WHERE UPPER(nome) = ? AND tipo = ? AND id IS NOT ?",
+                              (nome.upper(), tipo, item_id)).fetchone()
+        if repetido:
+            erros.append("Já existe um item com esse nome e esse tipo. Dê entrada nele em vez de cadastrar de novo.")
+    return erros, {"nome": nome, "tipo": tipo, "quantidade": quantidade, "minimo": minimo, "custo": custo, "preco": preco,
+                   "texto": {k: request.form.get(k, "") for k in ("nome", "tipo", "quantidade", "minimo", "custo", "preco")}}
+
+
+@app.route("/estoque/novo", methods=["POST"])
+def cadastrar_item():
+    db = get_db()
+    erros, d = ler_dados_do_item(db, com_quantidade=True)
+    if erros:
+        return pagina_estoque(erros, d["texto"])
+    cursor = db.execute("INSERT INTO estoque_itens (nome, tipo, minimo, custo_centavos, preco_centavos, criado_por) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (d["nome"], d["tipo"], d["minimo"], d["custo"], d["preco"], g.usuario["nome"]))
+    if d["quantidade"]:
+        mover_estoque(db, cursor.lastrowid, d["quantidade"], "INICIAL", "Cadastro do item")
+    db.commit()
+    return redirect(url_for("estoque"))
+
+
+def buscar_item(db, id):
+    item = db.execute("SELECT * FROM estoque_itens WHERE id = ?", (id,)).fetchone()
+    if not item:
+        abort(404)
+    return item
+
+
+@app.route("/estoque/<int:id>/editar", methods=["POST"])
+def editar_item(id):
+    """Muda nome, estoque mínimo, custo e preço. O preço novo só vale para usos futuros: o que já foi
+    colocado em um orçamento guarda o preço da hora."""
+    db = get_db()
+    buscar_item(db, id)
+    erros, d = ler_dados_do_item(db, item_id=id)
+    if erros:
+        return pagina_estoque(erros)
+    db.execute("UPDATE estoque_itens SET nome = ?, tipo = ?, minimo = ?, custo_centavos = ?, preco_centavos = ? WHERE id = ?",
+               (d["nome"], d["tipo"], d["minimo"], d["custo"], d["preco"], id))
+    db.commit()
+    return redirect(url_for("estoque"))
+
+
+@app.route("/estoque/<int:id>/entrada", methods=["POST"])
+def entrada_estoque(id):
+    db = get_db()
+    item = buscar_item(db, id)
+    quantidade = interpretar_quantidade(request.form.get("quantidade", ""))
+    motivo = " ".join(request.form.get("motivo", "").split())
+    erros = []
+    if quantidade is None:
+        erros.append(f"A quantidade que entrou deve ser um número inteiro de 1 a {MAX_QUANTIDADE}.")
+    elif item["quantidade"] + quantidade > MAX_QUANTIDADE:
+        erros.append(f"O estoque de um item não pode passar de {MAX_QUANTIDADE}.")
+    if len(motivo) > MAX_MOTIVO_ESTOQUE:
+        erros.append(f"A observação pode ter no máximo {MAX_MOTIVO_ESTOQUE} letras.")
+    if erros:
+        return pagina_estoque(erros)
+    mover_estoque(db, id, quantidade, "ENTRADA", motivo or None)
+    db.commit()
+    return redirect(url_for("estoque"))
+
+
+@app.route("/estoque/<int:id>/ajuste", methods=["POST"])
+def ajuste_estoque(id):
+    """Corrige a quantidade para o que foi contado na prateleira (perda, quebra, contagem). O motivo é obrigatório."""
+    db = get_db()
+    item = buscar_item(db, id)
+    contada = interpretar_quantidade(request.form.get("quantidade", ""), 0)
+    motivo = " ".join(request.form.get("motivo", "").split())
+    erros = []
+    if contada is None:
+        erros.append(f"A quantidade contada deve ser um número inteiro de 0 a {MAX_QUANTIDADE}.")
+    elif contada == item["quantidade"]:
+        erros.append("A quantidade contada é igual à do sistema: não há o que ajustar.")
+    if sum(1 for letra in motivo if letra.isalpha()) < 3:
+        erros.append("Explique o motivo do ajuste (exemplo: contagem, peça quebrada).")
+    elif len(motivo) > MAX_MOTIVO_ESTOQUE:
+        erros.append(f"O motivo pode ter no máximo {MAX_MOTIVO_ESTOQUE} letras.")
+    if erros:
+        return pagina_estoque(erros)
+    mover_estoque(db, id, contada - item["quantidade"], "AJUSTE", motivo)
+    db.commit()
+    return redirect(url_for("estoque"))
+
+
+@app.route("/estoque/<int:id>/alternar", methods=["POST"])
+def alternar_item(id):
+    """Só o dono tira um item de uso (ou volta com ele). O item e o histórico dele continuam guardados."""
+    so_dono()
+    db = get_db()
+    item = buscar_item(db, id)
+    db.execute("UPDATE estoque_itens SET ativo = ? WHERE id = ?", (0 if item["ativo"] else 1, id))
+    db.commit()
+    return redirect(url_for("estoque"))
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/pecas", methods=["POST"])
+def usar_peca(id, servico_id):
+    """Usa uma peça ou tinta do estoque em um serviço: baixa no estoque e soma o preço ao orçamento."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    servico = db.execute("SELECT id FROM servicos WHERE id = ? AND veiculo_id = ?", (servico_id, id)).fetchone()
+    if not servico:
+        abort(404)
+    texto_item = request.form.get("item_id", "")
+    item = db.execute("SELECT * FROM estoque_itens WHERE id = ? AND ativo = 1",
+                      (int(texto_item) if texto_item.isascii() and texto_item.isdigit() else 0,)).fetchone()
+    quantidade = interpretar_quantidade(request.form.get("quantidade", ""))
+    if not item:
+        return pagina_veiculo(id, ["Escolha uma peça ou tinta do estoque."])
+    if quantidade is None:
+        return pagina_veiculo(id, ["Informe a quantidade usada (número inteiro, a partir de 1)."])
+    if not mover_estoque(db, item["id"], -quantidade, "SAIDA", None, id, servico_id):
+        db.rollback()
+        return pagina_veiculo(id, [f"Não há estoque suficiente de {item['nome']}: restam {item['quantidade']}."])
+    db.execute("INSERT INTO servico_pecas (servico_id, veiculo_id, item_id, nome, quantidade, preco_centavos, "
+               "custo_centavos, registrado_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+               (servico_id, id, item["id"], item["nome"], quantidade, item["preco_centavos"],
+                item["custo_centavos"], g.usuario["nome"]))
+    recalcular_pecas(db, servico_id)
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/pecas/<int:peca_id>/devolver", methods=["POST"])
+def devolver_peca(id, servico_id, peca_id):
+    """Tira a peça do serviço (foi colocada por engano ou não foi usada): ela volta para o estoque."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    peca = db.execute("SELECT * FROM servico_pecas WHERE id = ? AND servico_id = ? AND veiculo_id = ?",
+                      (peca_id, servico_id, id)).fetchone()
+    if not peca:
+        abort(404)
+    mover_estoque(db, peca["item_id"], peca["quantidade"], "DEVOLUCAO", "Tirada do serviço", id, servico_id)
+    db.execute("DELETE FROM servico_pecas WHERE id = ?", (peca_id,))
+    recalcular_pecas(db, servico_id)
+    db.commit()
     return redirect(url_for("ver_veiculo", id=id))
 
 

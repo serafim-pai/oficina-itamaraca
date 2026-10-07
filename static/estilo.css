@@ -231,3 +231,8 @@ td.problema details.fotos-problema { margin-top: 8px; font-size: 13px; }
 .botoes-etapa button { width: auto; }
 .botoes-etapa button.secundario { background: #6b7280; }
 .botoes-etapa button:disabled { opacity: .5; cursor: not-allowed; }
+td.num { text-align: right; white-space: nowrap; }
+td.acoes-estoque details { margin-bottom: 6px; font-size: 13px; }
+td.acoes-estoque input, td.acoes-estoque select { margin: 3px 0; }
+td.pecas .peca-usada { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+td.pecas details.usar-peca { margin-top: 8px; font-size: 13px; }

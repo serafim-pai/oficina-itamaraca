@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estoque - Oficina Itamaracá</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+    {% include '_menu.html' %}
+    <h1>Estoque de peças e tintas</h1>
+    <p class="aviso">Tudo é contado em unidades inteiras (a tinta, por lata ou frasco). Ao usar um item em um serviço,
+        a quantidade baixa aqui e o preço entra no orçamento do veículo.</p>
+
+    {% if erros %}
+    <div class="erros">
+        <ul>
+            {% for erro in erros %}
+            <li>{{ erro }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% for i in itens if i['quantidade'] <= i['minimo'] and i['minimo'] > 0 %}
+    {% if loop.first %}<div class="erros"><strong>Estoque baixo:</strong><ul>{% endif %}
+        <li>{{ i['nome'] }}: restam {{ i['quantidade'] }} (mínimo {{ i['minimo'] }})</li>
+    {% if loop.last %}</ul></div>{% endif %}
+    {% endfor %}
+
+    <h2>Itens em estoque</h2>
+    {% if itens %}
+    <div class="tabela-rolavel">
+    <table class="estoque">
+        <tr><th>Item</th><th>Tipo</th><th>Quantidade</th><th>Mínimo</th><th>Custo</th><th>Preço de venda</th><th>Ações</th></tr>
+        {% for i in itens %}
+        <tr>
+            <td>{{ i['nome'] }}</td>
+            <td>{{ i['tipo'] }}</td>
+            <td class="num">
+                {{ i['quantidade'] }}
+                {% if i['quantidade'] == 0 %}<span class="selo selo-recusado">Acabou</span>
+                {% elif i['minimo'] > 0 and i['quantidade'] <= i['minimo'] %}<span class="selo selo-aguardando">Baixo</span>{% endif %}
+            </td>
+            <td class="num">{{ i['minimo'] }}</td>
+            <td class="num">{{ formatar_dinheiro(i['custo_centavos']) }}</td>
+            <td class="num">{{ formatar_dinheiro(i['preco_centavos']) }}</td>
+            <td class="acoes-estoque">
+                <details>
+                    <summary>Entrada</summary>
+                    <form method="POST" action="{{ url_for('entrada_estoque', id=i['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="text" name="quantidade" inputmode="numeric" maxlength="6" placeholder="Quantidade" aria-label="Quantidade que entrou">
+                        <input type="text" name="motivo" maxlength="{{ max_motivo }}" placeholder="Observação (ex.: compra)" aria-label="Observação">
+                        <button type="submit">Dar entrada</button>
+                    </form>
+                </details>
+                <details>
+                    <summary>Ajustar</summary>
+                    <form method="POST" action="{{ url_for('ajuste_estoque', id=i['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="text" name="quantidade" inputmode="numeric" maxlength="6" placeholder="Quantidade contada" aria-label="Quantidade contada">
+                        <input type="text" name="motivo" maxlength="{{ max_motivo }}" placeholder="Motivo (obrigatório)" aria-label="Motivo do ajuste">
+                        <button type="submit">Ajustar</button>
+                    </form>
+                </details>
+                <details>
+                    <summary>Editar</summary>
+                    <form method="POST" action="{{ url_for('editar_item', id=i['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="text" name="nome" maxlength="{{ max_nome }}" value="{{ i['nome'] }}" aria-label="Nome">
+                        <select name="tipo" aria-label="Tipo">
+                            {% for t in tipos %}<option value="{{ t }}" {{ 'selected' if t == i['tipo'] }}>{{ t }}</option>{% endfor %}
+                        </select>
+                        <input type="text" name="minimo" inputmode="numeric" maxlength="6" value="{{ i['minimo'] }}" aria-label="Estoque mínimo" placeholder="Mínimo">
+                        <input type="text" name="custo" inputmode="decimal" value="{{ formatar_dinheiro(i['custo_centavos'], false) }}" aria-label="Custo" placeholder="Custo">
+                        <input type="text" name="preco" inputmode="decimal" value="{{ formatar_dinheiro(i['preco_centavos'], false) }}" aria-label="Preço de venda" placeholder="Preço">
+                        <span class="aviso">O preço novo vale só para usos futuros.</span>
+                        <button type="submit">Salvar</button>
+                    </form>
+                </details>
+                {% if usuario and usuario['tipo'] == 'DONO' %}
+                <form method="POST" action="{{ url_for('alternar_item', id=i['id']) }}"
+                      onsubmit="return confirm('Tirar este item de uso? Ele some das listas, mas o histórico fica guardado.')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="botao-pequeno perigo">Tirar de uso</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    </div>
+    <p class="aviso">Valor do estoque: {{ formatar_dinheiro(valor_custo) }} pelo custo,
+        {{ formatar_dinheiro(valor_venda) }} pelo preço de venda.</p>
+    {% else %}
+    <p>Nenhum item cadastrado ainda.</p>
+    {% endif %}
+
+    <h2>Cadastrar item</h2>
+    <form method="POST" action="{{ url_for('cadastrar_item') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="nome">Nome do item</label>
+        <input type="text" id="nome" name="nome" maxlength="{{ max_nome }}" value="{{ dados.get('nome', '') }}" required>
+        <label for="tipo">Tipo</label>
+        <select id="tipo" name="tipo" required>
+            <option value="">Escolha...</option>
+            {% for t in tipos %}<option value="{{ t }}" {{ 'selected' if dados.get('tipo') == t }}>{{ t }}</option>{% endfor %}
+        </select>
+        <label for="quantidade">Quantidade que já tem (inteiro)</label>
+        <input type="text" id="quantidade" name="quantidade" inputmode="numeric" maxlength="6" value="{{ dados.get('quantidade', '') }}" placeholder="0">
+        <label for="minimo">Estoque mínimo (avisa quando chegar nele)</label>
+        <input type="text" id="minimo" name="minimo" inputmode="numeric" maxlength="6" value="{{ dados.get('minimo', '') }}" placeholder="0">
+        <label for="custo">Custo de cada unidade (R$, quanto a oficina pagou)</label>
+        <input type="text" id="custo" name="custo" inputmode="decimal" value="{{ dados.get('custo', '') }}" placeholder="0,00">
+        <label for="preco">Preço de venda de cada unidade (R$, entra no orçamento)</label>
+        <input type="text" id="preco" name="preco" inputmode="decimal" value="{{ dados.get('preco', '') }}" placeholder="0,00" required>
+        <button type="submit">Cadastrar</button>
+    </form>
+
+    <h2>Últimas movimentações</h2>
+    {% if movimentos %}
+    <div class="tabela-rolavel">
+    <table>
+        <tr><th>Quando</th><th>Item</th><th>O que houve</th><th>Quantidade</th><th>Saldo</th><th>Veículo</th><th>Por</th><th>Observação</th></tr>
+        {% for m in movimentos %}
+        <tr>
+            <td>{{ m['criado_em']|hora_brasil }}</td>
+            <td>{{ m['nome'] }}</td>
+            <td>{{ nomes_movimento.get(m['tipo'], m['tipo']) }}</td>
+            <td class="num">{{ '+' if m['variacao'] > 0 }}{{ m['variacao'] }}</td>
+            <td class="num">{{ m['saldo_apos'] }}</td>
+            <td>{% if m['placa'] %}<a href="{{ url_for('ver_veiculo', id=m['veiculo_id']) }}">{{ m['placa'] }}</a>{% else %}-{% endif %}</td>
+            <td>{{ m['registrado_por'] }}</td>
+            <td>{{ m['motivo'] or '' }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    </div>
+    {% else %}
+    <p>Nenhuma movimentação ainda.</p>
+    {% endif %}
+
+    {% if inativos %}
+    <details class="historico-desfeitas">
+        <summary>Itens fora de uso ({{ inativos|length }})</summary>
+        <ul>
+            {% for i in inativos %}
+            <li>{{ i['nome'] }} ({{ i['tipo'] }}, restam {{ i['quantidade'] }})
+                {% if usuario and usuario['tipo'] == 'DONO' %}
+                <form method="POST" action="{{ url_for('alternar_item', id=i['id']) }}" style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="botao-pequeno">Voltar a usar</button>
+                </form>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+</body>
+</html>

@@ -33,8 +33,13 @@
             {% for i in itens %}
             <tr>
                 <td><strong>{{ i['tipo'] }}</strong><br>{{ i['problema'] }}</td>
-                <td>{{ i['como_resolver'] or '-' }}</td>
-                <td class="num">{{ formatar_dinheiro(i['valor_centavos']) }}</td>
+                <td>{{ i['como_resolver'] or '-' }}
+                    {% for p in pecas_entrega.get(i['id'], []) %}
+                    <br><small>{{ p['quantidade'] }}x {{ p['nome'] }} ({{ formatar_dinheiro(p['quantidade'] * p['preco_centavos']) }})</small>
+                    {% endfor %}
+                </td>
+                <td class="num">{{ formatar_dinheiro(i['valor_centavos'] + i['pecas_centavos']) }}
+                    {% if i['pecas_centavos'] %}<br><small>serviço {{ formatar_dinheiro(i['valor_centavos']) }}<br>peças {{ formatar_dinheiro(i['pecas_centavos']) }}</small>{% endif %}</td>
                 <td>{{ texto_garantia(i['garantia_valor'], i['garantia_unidade']) }}</td>
                 <td>{{ formatar_data(i['garantia_ate']) if i['garantia_ate'] else '-' }}</td>
             </tr>
