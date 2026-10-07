@@ -17,6 +17,7 @@
         <strong>Responsável:</strong> {{ veiculo['responsavel'] or '-' }}<br>
         <strong>Veículo:</strong> {{ veiculo['marca'] or '-' }} {{ veiculo['modelo'] }} {{ veiculo['cor'] }} {{ veiculo['ano'] }}<br>
         <strong>Km:</strong> {{ veiculo['quilometragem'] or '-' }}<br>
+        <strong>Chassi:</strong> {{ veiculo['chassi'] or '-' }}<br>
         <strong>WhatsApp:</strong> {{ formatar_telefone(veiculo['telefone']) }}
     </p>
     <details class="telefone-cliente">
@@ -31,7 +32,7 @@
     </details>
     {% if not entrega %}
     <details class="telefone-cliente" {{ 'open' if not (veiculo['marca'] and veiculo['modelo']) }}>
-        <summary>✏️ Corrigir marca, modelo, cor, ano e km do veículo</summary>
+        <summary>✏️ Corrigir marca, modelo, cor, ano, km e chassi do veículo</summary>
         {% if not (veiculo['marca'] and veiculo['modelo']) %}
         <p class="aviso">Informe a marca e o modelo para poder pesquisar peças na Web para este veículo.</p>
         {% endif %}
@@ -47,6 +48,8 @@
             <input type="text" id="dado_ano" name="ano" inputmode="numeric" maxlength="9" value="{{ veiculo['ano'] or '' }}">
             <label for="dado_km">Quilometragem</label>
             <input type="text" id="dado_km" name="quilometragem" maxlength="{{ max_dado_veiculo }}" value="{{ veiculo['quilometragem'] or '' }}">
+            <label for="dado_chassi">Chassi (17 letras e números; ajuda a achar a peça certa)</label>
+            <input type="text" id="dado_chassi" name="chassi" maxlength="20" autocapitalize="characters" value="{{ veiculo['chassi'] or '' }}">
             <button type="submit">Salvar</button>
         </form>
     </details>
@@ -217,9 +220,11 @@
                         <input type="text" name="peca" maxlength="{{ max_peca_busca }}" aria-label="Peça a pesquisar"
                                placeholder="Peça (ex.: pastilha de freio dianteira)">
                         <span class="aviso">Pesquisa para {{ veiculo['marca'] }} {{ veiculo['modelo'] }} {{ veiculo['ano'] or '' }},
-                            pedindo o número original. Confira o número antes de comprar.</span>
+                            pedindo o número original. Confira o número antes de comprar.
+                            {% if veiculo['chassi'] %}Chassi para dizer no balcão: <strong>{{ veiculo['chassi'] }}</strong>.
+                            {% else %}Informe o chassi do veículo para ter também a pesquisa pelo chassi.{% endif %}</span>
                         <div class="botoes-busca">
-                            {% for chave, (rotulo, _) in sites_busca.items() %}
+                            {% for chave, (rotulo, _) in sites_busca.items() if chave != 'CHASSI' or veiculo['chassi'] %}
                             <button type="submit" name="site" value="{{ chave }}">{{ rotulo }}</button>
                             {% endfor %}
                         </div>

@@ -234,3 +234,7 @@ está no estoque se pesquisa e se compra na autopeça.
   modelo o formulário já vem aberto, com o aviso de que são necessários para pesquisar peças. Placa e
   responsável não mudam aqui. Se algum campo estiver inválido (ano fora de 1900-2100, texto longo
   demais), nada é salvo.
+- O veículo pode ter o **chassi** (opcional, de 6 a 17 letras e números; de 17 caracteres não usa I, O e Q),
+  informado no cadastro ou depois. Com chassi cadastrado, a pesquisa de peça ganha a opção "Pelo chassi
+  (Google)" e a tela mostra o chassi para a pessoa dizer no balcão da autopeça, o que diminui o risco de
+  comprar a peça de outra versão do mesmo carro.

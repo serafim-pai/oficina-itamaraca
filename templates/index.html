@@ -54,6 +54,8 @@
 
         <label for="quilometragem">Quilometragem</label>
         <input type="text" id="quilometragem" name="quilometragem" value="{{ dados.get('quilometragem', '') }}">
+        <label for="chassi">Chassi (opcional, ajuda a achar a peça certa)</label>
+        <input type="text" id="chassi" name="chassi" maxlength="20" autocapitalize="characters" value="{{ dados.get('chassi', '') }}">
 
         <label for="telefone">WhatsApp do cliente (opcional)</label>
         <input type="tel" id="telefone" name="telefone" inputmode="tel" placeholder="(81) 98765-4321" value="{{ dados.get('telefone', '') }}">
