@@ -74,5 +74,12 @@ class BaseTest(unittest.TestCase):
     def funcionario(self):
         return self.entrar_como(self.criar_usuario("func@teste.com", "FUNCIONARIO"))
 
+    def marcar_pronto(self, vid=None):
+        """Deixa o veículo na etapa 'Pronto para retirada' (a entrega só fecha assim)."""
+        vid = vid or self.sql("SELECT id FROM veiculos ORDER BY id DESC LIMIT 1")[0]["id"]
+        ultima = self.sql("SELECT etapa FROM etapas WHERE veiculo_id = ? ORDER BY id DESC LIMIT 1", (vid,))
+        if not ultima or ultima[0]["etapa"] != "PRONTO":
+            self.sql("INSERT INTO etapas (veiculo_id, etapa, registrado_por) VALUES (?, 'PRONTO', 'TESTE')", (vid,))
+
     def total_veiculos(self):
         return self.sql("SELECT COUNT(*) AS n FROM veiculos")[0]["n"]

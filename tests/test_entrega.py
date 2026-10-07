@@ -54,6 +54,7 @@ class EntregaBase(BaseTest):
 
     def fechar(self, condicoes=CONDICOES, assinatura=..., cliente=None):
         cliente = cliente or self.dono_c
+        self.marcar_pronto(self.vid)
         return cliente.post(f"/veiculos/{self.vid}/entrega", content_type="multipart/form-data", data={
             "condicoes": condicoes, "assinatura": self.assinatura(cliente) if assinatura is ... else assinatura,
             "fotos_entrega": foto_de_entrega()})
@@ -221,6 +222,7 @@ class FecharEntregaTest(EntregaBase):
         self.assertIn("Falta informar o tempo de garantia de <strong>2</strong>", pagina)
         self.assertRegex(pagina, r"<button type=\"submit\" disabled>Fechar a entrega de hoje")
         self.garantias_ok()
+        self.marcar_pronto(self.vid)          # com a garantia informada e o veículo pronto, o botão liga
         self.assertNotRegex(self.pagina(), r"<button type=\"submit\" disabled>Fechar a entrega")
 
     def test_exige_as_condicoes_que_cancelam_a_garantia(self):

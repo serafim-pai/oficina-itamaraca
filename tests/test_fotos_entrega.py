@@ -52,6 +52,7 @@ class Base(BaseTest):
 
     def fechar(self, fotos=..., condicoes=CONDICOES, cliente=None, vid=None):
         vid = vid or self.vid
+        self.marcar_pronto(vid)
         if fotos is ...:
             fotos = [foto_de_entrega()]
         return (cliente or self.dono_c).post(
@@ -164,6 +165,7 @@ class ObrigatoriedadeDaFotoTest(Base):
         oficina.app.testing = False
         self.addCleanup(setattr, oficina.app, "testing", True)
         try:
+            self.marcar_pronto(self.vid)
             r = self.dono_c.post(f"/veiculos/{self.vid}/entrega", content_type="multipart/form-data",
                                  data={"condicoes": CONDICOES, "assinatura": assinatura,
                                        "fotos_entrega": [foto_de_entrega()]})

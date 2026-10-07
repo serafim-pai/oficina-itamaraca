@@ -587,6 +587,10 @@
             serviço{{ 's' if sem_garantia_informada != 1 else '' }} (coluna <strong>Garantia</strong> da tabela acima;
             use 0 para "sem garantia"). Só depois dá para fechar a entrega.</div>
         {% endif %}
+        {% if etapa != 'PRONTO' %}
+        <div class="aviso-custo">O veículo está em <strong>{{ etapas[etapa] }}</strong>. A entrega só pode ser fechada quando ele
+            estiver em <strong>{{ etapas['PRONTO'] }}</strong>: mude a etapa em "Etapa do serviço" quando o reparo terminar.</div>
+        {% endif %}
         <form method="POST" action="{{ url_for('fechar_entrega', id=veiculo['id']) }}" enctype="multipart/form-data"
               onsubmit="return confirm('Fechar a entrega de hoje? Depois disso o cadastro deste veículo não poderá mais ser alterado.')">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -600,7 +604,7 @@
             <label for="condicoes">Condições que cancelam a garantia *</label>
             <textarea id="condicoes" name="condicoes" rows="9" maxlength="{{ max_condicoes }}">{{ dados.get('condicoes', condicoes_padrao) }}</textarea>
             <span class="aviso">Este texto aparece no comprovante entregue ao cliente. O texto acima é uma sugestão: edite como quiser.</span>
-            <button type="submit" {{ 'disabled' if sem_garantia_informada }}>Fechar a entrega de hoje</button>
+            <button type="submit" {{ 'disabled' if sem_garantia_informada or etapa != 'PRONTO' }}>Fechar a entrega de hoje</button>
         </form>
         {% else %}
         <p class="aviso">A entrega só pode ser fechada depois que o cliente aprovar o orçamento.</p>

@@ -216,6 +216,7 @@ class DesfazerEntregaTest(Base):
     # ---- atalhos ----
     def fechar(self, vid=None):
         vid = vid or self.vid
+        self.marcar_pronto(vid)
         return self.dono_c.post(f"/veiculos/{vid}/entrega", content_type="multipart/form-data",
                                 data={"condicoes": CONDICOES, "assinatura": self.assinatura(vid), "fotos_entrega": foto_de_entrega()})
 

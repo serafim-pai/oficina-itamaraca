@@ -86,6 +86,7 @@ class HorarioNasTelasTest(BaseTest):
                        data={"decisao": decisao, "forma": "TELEFONE", "assinatura": self.assinatura()})
 
     def fechar(self):
+        self.marcar_pronto(self.vid)
         return self.dono_c.post(f"/veiculos/{self.vid}/entrega", content_type="multipart/form-data",
                                 data={"condicoes": CONDICOES, "assinatura": self.assinatura(), "fotos_entrega": foto_de_entrega()})
 

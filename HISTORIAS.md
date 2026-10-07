@@ -261,3 +261,9 @@ Buscar na lista de veículos:
 A lista de veículos também aparece como **cartões** (um por veículo, com a placa em destaque no topo, depois
 o responsável, as fotos, a situação do orçamento, da etapa e da entrega, e os dados do carro), sem rolagem
 para o lado. Nada mudou no que cada informação mostra.
+
+A entrega só fecha com o veículo "Pronto para retirada":
+- Além do orçamento aprovado, da garantia informada e das fotos, o veículo precisa estar na etapa "Pronto para
+  retirada". Em "Aguardando início" ou "Em reparo" o sistema não fecha a entrega e explica o motivo; a tela
+  mostra o aviso e deixa o botão desligado até a etapa mudar.
+- Se a etapa voltar de "Pronto" para "Em reparo", a entrega volta a ficar bloqueada.

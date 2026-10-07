@@ -1847,8 +1847,8 @@ def limpar_condicoes(texto):
 
 @app.route("/veiculos/<int:id>/entrega", methods=["POST"])
 def fechar_entrega(id):
-    """História 8: o dono fecha a entrega do veículo. Só com o orçamento aprovado, o tempo de garantia
-    informado em TODOS os serviços e as condições que cancelam a garantia. A data de entrega é hoje.
+    """História 8: o dono fecha a entrega do veículo. Só com o orçamento aprovado, o veículo na etapa
+    "Pronto para retirada", o tempo de garantia informado em TODOS os serviços e as condições que cancelam a garantia. A data de entrega é hoje.
     Fica guardada uma cópia do que foi combinado (o comprovante sai dela) e o cadastro é travado."""
     so_dono()
     db = get_db()
@@ -1864,6 +1864,10 @@ def fechar_entrega(id):
         erros.append("A entrega só pode ser fechada depois que o cliente aprovar o orçamento.")
     elif request.form.get("assinatura", "") != assinatura_orcamento(servicos):
         erros.append("O orçamento mudou enquanto você fechava a entrega. Confira os valores e tente de novo.")
+    atual = etapa_atual(db, id)
+    if atual != "PRONTO":
+        erros.append(f"A entrega só pode ser fechada com o veículo na etapa \"{ETAPAS['PRONTO']}\" (agora está em "
+                     f"\"{ETAPAS[atual]}\"). Mude a etapa em \"Etapa do serviço\" quando o reparo terminar.")
     faltam = sum(1 for s in servicos if s["garantia_valor"] is None)
     if faltam:
         erros.append("Informe o tempo de garantia de todos os serviços antes de fechar a entrega "
