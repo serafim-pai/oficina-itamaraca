@@ -2120,8 +2120,10 @@ def normalizar(texto):
 
 
 def interpretar_aplicacoes(texto):
-    """Lê o campo "serve para": uma linha por carro, no formato MARCA / MODELO / ANO (o ano é opcional e pode
-    ser um período, como 2010-2015). Devolve (lista de (marca, modelo, ano_de, ano_ate), erros)."""
+    """Lê o campo "serve para": uma linha por marca, no formato MARCA / MODELO / ANO (o ano é opcional e pode
+    ser um período, como 2010-2015). Vários modelos da mesma marca e do mesmo ano podem ir na mesma linha,
+    separados por vírgula ou ponto e vírgula (GM / MONZA, KADETT / 1983-1998). Cada modelo vira um carro.
+    Devolve (lista de (marca, modelo, ano_de, ano_ate), erros)."""
     linhas, erros = [], []
     for numero, bruto in enumerate(texto.replace("\r", "").split("\n"), 1):
         linha = " ".join(bruto.split())
@@ -2129,10 +2131,12 @@ def interpretar_aplicacoes(texto):
             continue
         partes = [p.strip() for p in linha.split("/")]
         exemplo = f"Linha {numero} do campo \"serve para\": use MARCA / MODELO / ANO (exemplo: FIAT / UNO / 2010-2015)."
-        if not 2 <= len(partes) <= 3 or not partes[0] or not partes[1]:
+        modelos = [m.strip() for m in re.split(r"[,;]", partes[1])] if len(partes) >= 2 else []
+        modelos = [m for m in modelos if m]
+        if not 2 <= len(partes) <= 3 or not partes[0] or not modelos:
             erros.append(exemplo)
             continue
-        if len(partes[0]) > MAX_TEXTO_ITEM or len(partes[1]) > MAX_TEXTO_ITEM:
+        if len(partes[0]) > MAX_TEXTO_ITEM or any(len(m) > MAX_TEXTO_ITEM for m in modelos):
             erros.append(f"Linha {numero} do campo \"serve para\": marca e modelo podem ter no máximo {MAX_TEXTO_ITEM} letras.")
             continue
         ano_de = ano_ate = None
@@ -2145,7 +2149,10 @@ def interpretar_aplicacoes(texto):
             if ano_ate < ano_de or ano_de < 1900 or ano_ate > 2100:
                 erros.append(f"Linha {numero} do campo \"serve para\": confira os anos (de 1900 a 2100, do menor para o maior).")
                 continue
-        linhas.append((partes[0].upper(), partes[1].upper(), ano_de, ano_ate))
+        for modelo in modelos:
+            carro = (partes[0].upper(), modelo.upper(), ano_de, ano_ate)
+            if carro not in linhas:          # o mesmo carro repetido conta uma vez só
+                linhas.append(carro)
     if len(linhas) > MAX_APLICACOES:
         erros.append(f"Informe no máximo {MAX_APLICACOES} carros por item.")
     return linhas, erros

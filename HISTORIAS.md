@@ -267,3 +267,10 @@ A entrega só fecha com o veículo "Pronto para retirada":
   retirada". Em "Aguardando início" ou "Em reparo" o sistema não fecha a entrega e explica o motivo; a tela
   mostra o aviso e deixa o botão desligado até a etapa mudar.
 - Se a etapa voltar de "Pronto" para "Em reparo", a entrega volta a ficar bloqueada.
+
+Vários modelos na mesma linha de "Serve para":
+- Quando a marca e o ano são os mesmos, os modelos podem ir na mesma linha, separados por vírgula ou ponto e
+  vírgula: `GM / MONZA, KADETT, IPANEMA / 1983-1998`. Cada modelo vira um carro (aparece em uma linha na
+  tela e conta no limite de 40 carros por item). O mesmo carro repetido conta uma vez só. Marcas ou anos
+  diferentes continuam em linhas separadas.
+

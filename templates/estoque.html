@@ -98,7 +98,9 @@
                         <textarea id="aplicacoes_{{ i['id'] }}" name="aplicacoes" rows="4" placeholder="FIAT / UNO / 2010-2015">{% if e %}{{ valores.get('aplicacoes', '') }}{% else %}{% for a in aplicacoes.get(i['id'], []) %}{{ texto_aplicacao(a) }}{% if not loop.last %}
 {% endif %}{% endfor %}{% endif %}</textarea>
                         <span class="aviso">Uma linha para cada carro, sempre assim: <strong>MARCA / MODELO / ANO</strong>
-                            (o ano é opcional). Exemplos: <code>FIAT / UNO / 2010-2015</code> e <code>VOLKSWAGEN / GOL</code>.</span>
+                            (o ano é opcional). Exemplos: <code>FIAT / UNO / 2010-2015</code> e <code>VOLKSWAGEN / GOL</code>.
+                            Vários modelos da mesma marca e do mesmo ano podem ir na mesma linha, separados por vírgula:
+                            <code>GM / MONZA, KADETT / 1983-1998</code>.</span>
                         <label for="tipo_{{ i['id'] }}">Tipo</label>
                         <select id="tipo_{{ i['id'] }}" name="tipo">
                             {% for t in tipos %}<option value="{{ t }}" {{ 'selected' if t == (valores.get('tipo') if e else i['tipo']) }}>{{ t }}</option>{% endfor %}
@@ -145,8 +147,8 @@
         <input type="text" id="fabricante" name="fabricante" maxlength="{{ max_texto }}" value="{{ dados.get('fabricante', '') }}">
         <label for="codigo">Código da peça (o do catálogo ou da embalagem)</label>
         <input type="text" id="codigo" name="codigo" maxlength="{{ max_texto }}" value="{{ dados.get('codigo', '') }}">
-        <label for="aplicacoes">Serve para quais carros? Uma linha por carro: MARCA / MODELO / ANO</label>
-        <textarea id="aplicacoes" name="aplicacoes" rows="4" placeholder="FIAT / UNO / 2010-2015&#10;VOLKSWAGEN / GOL / 2008">{{ dados.get('aplicacoes', '') }}</textarea>
+        <label for="aplicacoes">Serve para quais carros? Uma linha por marca: MARCA / MODELO / ANO</label>
+        <textarea id="aplicacoes" name="aplicacoes" rows="4" placeholder="GM / MONZA, KADETT / 1983-1998&#10;FIAT / UNO / 2010-2015&#10;VOLKSWAGEN / GOL / 2008">{{ dados.get('aplicacoes', '') }}</textarea>
         <span class="aviso">O ano é opcional (pode ser um só, como 2008, ou um período). Até {{ max_aplicacoes }} carros. Para tinta e itens que servem em qualquer carro, deixe vazio.</span>
         <label for="tipo">Tipo</label>
         <select id="tipo" name="tipo" required>

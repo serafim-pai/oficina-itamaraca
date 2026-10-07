@@ -452,3 +452,56 @@ class FeedbackAoSalvarTest(EstoqueBase):
         self.assertIn("Informe o preço de venda", pagina)
         self.assertIn('value="Marca Nova"', pagina)
         self.assertEqual(self.item()["preco_centavos"], 6000)
+
+
+class VariosModelosNaMesmaLinhaTest(test_entrega.EntregaBase):
+    def novo(self, aplicacoes, **extra):
+        dados = {"nome": "Pastilha Fras-le", "tipo": "PEÇA", "quantidade": "5", "minimo": "1", "preco": "80,00",
+                 "aplicacoes": aplicacoes}
+        dados.update(extra)
+        return self.dono_c.post("/estoque/novo", data=dados)
+
+    def carros(self):
+        return [tuple(c) for c in self.sql("SELECT marca, modelo, ano_de, ano_ate FROM estoque_aplicacoes ORDER BY id")]
+
+    def test_virgula_separa_os_modelos_da_mesma_marca_e_ano(self):
+        self.assertEqual(self.novo("GM / MONZA, KADETT, ipanema / 1983-1998").status_code, 302)
+        self.assertEqual(self.carros(), [("GM", "MONZA", 1983, 1998), ("GM", "KADETT", 1983, 1998),
+                                         ("GM", "IPANEMA", 1983, 1998)])
+
+    def test_ponto_e_virgula_tambem_vale_e_sem_ano(self):
+        self.novo("FORD / PAMPA; BELINA ; ESCORT")
+        self.assertEqual(self.carros(), [("FORD", "PAMPA", None, None), ("FORD", "BELINA", None, None),
+                                         ("FORD", "ESCORT", None, None)])
+
+    def test_pode_misturar_linhas_com_um_e_com_varios_modelos(self):
+        self.novo("GM / MONZA, KADETT / 1983-1998\nFIAT / UNO / 2010")
+        self.assertEqual(len(self.carros()), 3)
+        self.assertEqual(self.carros()[2], ("FIAT", "UNO", 2010, 2010))
+
+    def test_modelo_repetido_conta_uma_vez(self):
+        self.novo("GM / MONZA, monza, MONZA / 1990\nGM / MONZA / 1990")
+        self.assertEqual(self.carros(), [("GM", "MONZA", 1990, 1990)])
+
+    def test_virgulas_sem_modelo_nao_servem(self):
+        for ruim in ("GM / , ", "GM / ;;", "GM"):
+            self.assertIn("serve para".encode(), self.novo(ruim).data, ruim)
+        self.assertEqual(self.carros(), [])
+
+    def test_modelo_gigante_numa_lista_nao_salva(self):
+        self.assertIn("no máximo".encode(), self.novo("GM / MONZA, " + "X" * 41).data)
+        self.assertEqual(self.carros(), [])
+
+    def test_o_limite_de_carros_conta_cada_modelo(self):
+        modelos = ", ".join(f"M{i}" for i in range(41))
+        self.assertIn("no máximo 40 carros".encode(), self.novo(f"GM / {modelos}").data)
+        self.assertEqual(self.carros(), [])
+
+    def test_ao_editar_cada_carro_volta_em_uma_linha_e_a_lista_do_veiculo_reconhece(self):
+        self.novo("GM / MONZA, KADETT / 1983-1998")
+        pagina = self.dono_c.get("/estoque").data.decode()
+        self.assertIn("GM / MONZA / 1983-1998", pagina)
+        self.assertIn("GM / KADETT / 1983-1998", pagina)
+        self.sql("UPDATE veiculos SET marca = 'GM', modelo = 'KADETT', ano = '1990'")
+        self.assertIn("Serve neste veículo", self.pagina())
+
