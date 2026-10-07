@@ -245,3 +245,7 @@ Editar um problema registrado:
 - Corrigir o texto não muda o orçamento: a aprovação do cliente continua valendo.
 - Se o tipo mudar, vale o limite de garantia do novo tipo: se a garantia já informada passar dele, nada é
   salvo e o sistema pede para o dono corrigir a garantia primeiro.
+
+Os problemas registrados aparecem como **cartões** (um por serviço, com tipo, problema, como resolver, peça de
+referência, valor, peças, garantia, quem registrou e data empilhados), em vez de uma tabela larga com
+rolagem para o lado. Nada mudou no que cada campo faz.

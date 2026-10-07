@@ -147,7 +147,7 @@
     <h2>Problemas registrados</h2>
     {% if servicos %}
     <div class="tabela-rolavel">
-    <table>
+    <table class="servicos-cartoes">
         <tr>
             <th>Tipo</th>
             <th>Problema</th>
@@ -162,8 +162,8 @@
         </tr>
         {% for s in servicos %}
         <tr>
-            <td>{{ s['tipo'] }}</td>
-            <td class="problema">
+            <td data-label="Tipo">{{ s['tipo'] }}</td>
+            <td class="problema" data-label="Problema">
                 {{ s['problema'] }}
                 {% if not entrega %}
                 <details class="editar-problema">
@@ -212,7 +212,7 @@
                 </details>
                 {% endif %}
             </td>
-            <td class="resolucao">
+            <td class="resolucao" data-label="Como resolver">
                 {% if entrega %}
                 {{ s['como_resolver'] or '-' }}
                 {% else %}
@@ -225,7 +225,7 @@
                 {% endif %}
                 {% if s['como_resolver'] %}<span class="aviso">Por {{ s['resolvido_por'] }}</span>{% endif %}
             </td>
-            <td class="referencia-peca">
+            <td class="referencia-peca" data-label="Peça de referência">
                 {% if s['referencia_peca'] %}<p>{{ s['referencia_peca'] }}</p>{% elif entrega %}-{% endif %}
                 {% if not entrega %}
                 <details>
@@ -260,7 +260,7 @@
                 </details>
                 {% endif %}
             </td>
-            <td class="valor">
+            <td class="valor" data-label="Valor do serviço">
                 {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
                 <form method="POST" action="{{ url_for('registrar_valor', id=veiculo['id'], servico_id=s['id']) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -272,7 +272,7 @@
                 {{ formatar_dinheiro(s['valor_centavos']) if s['valor_centavos'] is not none else '-' }}
                 {% endif %}
             </td>
-            <td class="pecas">
+            <td class="pecas" data-label="Peças e tintas">
                 {% for p in pecas_servicos.get(s['id'], []) %}
                 <div class="peca-usada">
                     {{ p['quantidade'] }}x {{ p['nome'] }} - {{ formatar_dinheiro(p['quantidade'] * p['preco_centavos']) }}
@@ -310,7 +310,7 @@
                 {% endif %}
                 {% endif %}
             </td>
-            <td class="garantia">
+            <td class="garantia" data-label="Garantia">
                 {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
                 <form method="POST" action="{{ url_for('registrar_garantia', id=veiculo['id'], servico_id=s['id']) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -330,10 +330,10 @@
                 {{ texto_garantia(s['garantia_valor'], s['garantia_unidade']) }}
                 {% endif %}
             </td>
-            <td>{{ s['registrado_por'] }}</td>
-            <td>{{ s['criado_em']|hora_brasil }}</td>
+            <td data-label="Registrado por">{{ s['registrado_por'] }}</td>
+            <td data-label="Data">{{ s['criado_em']|hora_brasil }}</td>
             {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
-            <td class="acoes">
+            <td class="acoes" data-label="">
                 <form method="POST" action="{{ url_for('excluir_servico', id=veiculo['id'], servico_id=s['id']) }}"
                       onsubmit="return confirm('Excluir este problema?')">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
