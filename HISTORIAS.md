@@ -184,8 +184,9 @@ Como dono ou funcionário da oficina, quero cadastrar as peças e tintas que ten
 preço entrar no orçamento, para saber o que tenho, o que está acabando e cobrar certo.
 
 Combinado com o dono (ainda a confirmar com ele):
-- Dono e funcionário cadastram itens, dão entrada, ajustam a contagem e usam em serviços.
-  Só o dono tira um item de uso (ele some das listas, mas o histórico fica).
+- Só o dono cadastra e edita itens (nome, mínimo, custo e preço) e tira um item de uso (ele some das
+  listas, mas o histórico fica). O funcionário não vê o custo. Dono e funcionário dão entrada, ajustam a
+  contagem e usam em serviços.
 - Tudo é contado em **unidades inteiras** (tinta por lata ou frasco). Cada item tem nome, tipo (peça ou
   tinta), quantidade, estoque mínimo, custo e preço de venda. Não há dois itens com o mesmo nome e tipo.
 - Quando a quantidade chega ao mínimo, a tela do estoque avisa "Estoque baixo"; zerado mostra "Acabou".

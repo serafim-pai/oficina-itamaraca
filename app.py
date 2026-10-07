@@ -1978,6 +1978,8 @@ def ler_dados_do_item(db, item_id=None, com_quantidade=False):
 
 @app.route("/estoque/novo", methods=["POST"])
 def cadastrar_item():
+    """Só o dono cadastra itens: é ele quem define custo e preço."""
+    so_dono()
     db = get_db()
     erros, d = ler_dados_do_item(db, com_quantidade=True)
     if erros:
@@ -2001,7 +2003,8 @@ def buscar_item(db, id):
 @app.route("/estoque/<int:id>/editar", methods=["POST"])
 def editar_item(id):
     """Muda nome, estoque mínimo, custo e preço. O preço novo só vale para usos futuros: o que já foi
-    colocado em um orçamento guarda o preço da hora."""
+    colocado em um orçamento guarda o preço da hora. Só o dono edita (custo e preço são dele)."""
+    so_dono()
     db = get_db()
     buscar_item(db, id)
     erros, d = ler_dados_do_item(db, item_id=id)

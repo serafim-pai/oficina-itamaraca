@@ -14,7 +14,7 @@ class EstoqueBase(BaseTest):
 
     def cadastrar(self, nome="Pastilha de freio", tipo="PEÇA", quantidade="10", minimo="3", custo="35,00",
                   preco="60,00", cliente=None):
-        return (cliente or self.func).post("/estoque/novo", data={
+        return (cliente or self.dono_c).post("/estoque/novo", data={
             "nome": nome, "tipo": tipo, "quantidade": quantidade, "minimo": minimo, "custo": custo, "preco": preco})
 
     def item(self, id=None):
@@ -66,6 +66,27 @@ class CadastroDeItensTest(EstoqueBase):
         self.assertEqual(self.sql("SELECT COUNT(*) AS n FROM estoque_itens")[0]["n"], 1)
         self.assertEqual(self.cadastrar(nome="Pastilha de freio", tipo="TINTA").status_code, 302)
 
+    def test_funcionario_nao_cadastra_nem_edita_item(self):
+        self.assertEqual(self.cadastrar(cliente=self.func).status_code, 403)
+        self.assertEqual(self.sql("SELECT COUNT(*) AS n FROM estoque_itens")[0]["n"], 0)
+        self.cadastrar()
+        iid = self.item()["id"]
+        r = self.func.post(f"/estoque/{iid}/editar", data={
+            "nome": "X", "tipo": "PEÇA", "minimo": "1", "custo": "1,00", "preco": "1,00"})
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(self.item()["preco_centavos"], 6000)
+
+    def test_funcionario_nao_ve_o_custo_mas_o_dono_ve(self):
+        self.cadastrar(custo="35,00", preco="60,00")
+        func = self.func.get("/estoque").data.decode()
+        self.assertIn("R$ 60,00", func)
+        self.assertNotIn("R$ 35,00", func)
+        self.assertNotIn("Cadastrar item", func)
+        self.assertNotIn("pelo custo", func)
+        dono = self.dono_c.get("/estoque").data.decode()
+        self.assertIn("R$ 35,00", dono)
+        self.assertIn("Cadastrar item", dono)
+
     def test_sem_login_nao_acessa(self):
         r = oficina.app.test_client().get("/estoque")
         self.assertEqual(r.status_code, 302)
@@ -116,7 +137,7 @@ class MovimentosTest(EstoqueBase):
         self.assertIn("não há o que ajustar".encode(), r.data)
 
     def test_editar_muda_preco_e_minimo(self):
-        self.func.post(f"/estoque/{self.iid}/editar", data={
+        self.dono_c.post(f"/estoque/{self.iid}/editar", data={
             "nome": "Pastilha de freio", "tipo": "PEÇA", "minimo": "5", "custo": "40,00", "preco": "70,00"})
         i = self.item()
         self.assertEqual((i["minimo"], i["custo_centavos"], i["preco_centavos"]), (5, 4000, 7000))
@@ -137,7 +158,7 @@ class MovimentosTest(EstoqueBase):
 class UsoNoServicoTest(test_entrega.EntregaBase):
     def setUp(self):
         super().setUp()
-        self.func.post("/estoque/novo", data={"nome": "Pastilha de freio", "tipo": "PEÇA", "quantidade": "10",
+        self.dono_c.post("/estoque/novo", data={"nome": "Pastilha de freio", "tipo": "PEÇA", "quantidade": "10",
                                               "minimo": "2", "custo": "35,00", "preco": "60,00"})
         self.iid = self.sql("SELECT id FROM estoque_itens")[0]["id"]
 
@@ -193,7 +214,7 @@ class UsoNoServicoTest(test_entrega.EntregaBase):
 
     def test_preco_novo_nao_muda_o_que_ja_foi_usado(self):
         self.usar("1")
-        self.func.post(f"/estoque/{self.iid}/editar", data={
+        self.dono_c.post(f"/estoque/{self.iid}/editar", data={
             "nome": "Pastilha de freio", "tipo": "PEÇA", "minimo": "2", "custo": "50,00", "preco": "99,00"})
         self.assertEqual(self.pecas_do_servico(), 6000)
 
@@ -253,7 +274,7 @@ class UsoNoServicoTest(test_entrega.EntregaBase):
         self.aprovar()
         self.garantias_ok()
         self.fechar()
-        self.func.post(f"/estoque/{self.iid}/editar", data={
+        self.dono_c.post(f"/estoque/{self.iid}/editar", data={
             "nome": "Outro nome", "tipo": "PEÇA", "minimo": "2", "custo": "1,00", "preco": "1,00"})
         html = self.comprovante().data.decode()
         self.assertIn("2x Pastilha de freio", html)

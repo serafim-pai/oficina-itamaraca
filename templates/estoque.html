@@ -32,7 +32,7 @@
     {% if itens %}
     <div class="tabela-rolavel">
     <table class="estoque">
-        <tr><th>Item</th><th>Tipo</th><th>Quantidade</th><th>Mínimo</th><th>Custo</th><th>Preço de venda</th><th>Ações</th></tr>
+        <tr><th>Item</th><th>Tipo</th><th>Quantidade</th><th>Mínimo</th>{% if usuario and usuario['tipo'] == 'DONO' %}<th>Custo</th>{% endif %}<th>Preço de venda</th><th>Ações</th></tr>
         {% for i in itens %}
         <tr>
             <td>{{ i['nome'] }}</td>
@@ -43,7 +43,7 @@
                 {% elif i['minimo'] > 0 and i['quantidade'] <= i['minimo'] %}<span class="selo selo-aguardando">Baixo</span>{% endif %}
             </td>
             <td class="num">{{ i['minimo'] }}</td>
-            <td class="num">{{ formatar_dinheiro(i['custo_centavos']) }}</td>
+            {% if usuario and usuario['tipo'] == 'DONO' %}<td class="num">{{ formatar_dinheiro(i['custo_centavos']) }}</td>{% endif %}
             <td class="num">{{ formatar_dinheiro(i['preco_centavos']) }}</td>
             <td class="acoes-estoque">
                 <details>
@@ -64,6 +64,7 @@
                         <button type="submit">Ajustar</button>
                     </form>
                 </details>
+                {% if usuario and usuario['tipo'] == 'DONO' %}
                 <details>
                     <summary>Editar</summary>
                     <form method="POST" action="{{ url_for('editar_item', id=i['id']) }}">
@@ -79,7 +80,6 @@
                         <button type="submit">Salvar</button>
                     </form>
                 </details>
-                {% if usuario and usuario['tipo'] == 'DONO' %}
                 <form method="POST" action="{{ url_for('alternar_item', id=i['id']) }}"
                       onsubmit="return confirm('Tirar este item de uso? Ele some das listas, mas o histórico fica guardado.')">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -91,12 +91,14 @@
         {% endfor %}
     </table>
     </div>
-    <p class="aviso">Valor do estoque: {{ formatar_dinheiro(valor_custo) }} pelo custo,
-        {{ formatar_dinheiro(valor_venda) }} pelo preço de venda.</p>
+    <p class="aviso">Valor do estoque:
+        {% if usuario and usuario['tipo'] == 'DONO' %}{{ formatar_dinheiro(valor_custo) }} pelo custo,
+        {{ formatar_dinheiro(valor_venda) }} pelo preço de venda.{% else %}{{ formatar_dinheiro(valor_venda) }} pelo preço de venda.{% endif %}</p>
     {% else %}
     <p>Nenhum item cadastrado ainda.</p>
     {% endif %}
 
+    {% if usuario and usuario['tipo'] == 'DONO' %}
     <h2>Cadastrar item</h2>
     <form method="POST" action="{{ url_for('cadastrar_item') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -117,6 +119,9 @@
         <input type="text" id="preco" name="preco" inputmode="decimal" value="{{ dados.get('preco', '') }}" placeholder="0,00" required>
         <button type="submit">Cadastrar</button>
     </form>
+    {% else %}
+    <p class="aviso">Só o dono cadastra itens novos e muda custo e preço.</p>
+    {% endif %}
 
     <h2>Últimas movimentações</h2>
     {% if movimentos %}
