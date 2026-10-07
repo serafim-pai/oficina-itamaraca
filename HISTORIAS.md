@@ -10,6 +10,7 @@
 7. Definir o prazo de entrega
 8. Registrar a garantia
 9. Controlar o estoque de peças e tintas
+10. Pesquisar a peça certa na Web
 
 ## História 1 - Cadastrar o veículo
 Como dono da oficina, quero cadastrar o veículo com o nome do
@@ -213,3 +214,17 @@ Combinado com o dono (ainda a confirmar com ele):
 
 Limites conhecidos: o valor do serviço (mão de obra) continua sendo obrigatório e maior que zero, mesmo
 para serviço só de peça. Não há controle de fornecedor nem relatório de lucro ainda.
+
+## História 10 - Pesquisar a peça certa na Web
+Como dono ou funcionário da oficina, quero pesquisar na Web a peça de que o carro do momento precisa,
+pelo número original, para comprar na autopeça sem errar. Convive com o estoque (história 9): o que não
+está no estoque se pesquisa e se compra na autopeça.
+- Em cada serviço da tela do veículo há "Pesquisar peça na Web": a pessoa escreve a peça (exemplo:
+  pastilha de freio dianteira) e escolhe onde pesquisar: Google (pedindo o número original), Mercado Livre
+  ou Google Imagens. A pesquisa abre em outra aba, já com a marca, o modelo e o ano do veículo.
+- Sem marca e modelo cadastrados no veículo, a pesquisa não abre (avisa), para não buscar peça errada.
+- Quem abre o site é o navegador da pessoa: o servidor do sistema não acessa a Web, então funciona no plano
+  gratuito da hospedagem. O sistema só monta o endereço e só abre os sites da lista. Nada é comprado.
+- O que for achado serve de **referência** para comprar: nada entra no orçamento. Cada serviço tem uma
+  anotação opcional "peça de referência" (número original, loja, preço visto), de até 300 letras, que dá
+  para editar até a entrega e fica travada depois dela.

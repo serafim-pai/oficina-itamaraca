@@ -7,7 +7,7 @@ import sqlite3
 import unicodedata
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
-from urllib.parse import quote
+from urllib.parse import quote, quote_plus
 
 from flask import (Flask, Response, abort, g, redirect, render_template, request,
                    send_from_directory, session, url_for)
@@ -63,7 +63,15 @@ TRAVADOS_APOS_ENTREGA = {"registrar_servico", "registrar_resolucao", "registrar_
                          "registrar_aprovacao", "registrar_prazo", "registrar_garantia", "fechar_entrega",
                          "adicionar_fotos", "excluir_foto", "trocar_foto",
                          "adicionar_fotos_problema", "excluir_foto_problema", "registrar_etapa",
-                         "usar_peca", "devolver_peca"}
+                         "usar_peca", "devolver_peca", "registrar_referencia"}
+MAX_PECA_BUSCA = 100                 # letras do nome da peça pesquisada na Web
+MAX_REFERENCIA = 300                 # letras da anotação "número original / onde comprar"
+# Sites onde a pesquisa de peça é aberta (em outra aba). {q} é o texto da pesquisa já codificado.
+SITES_BUSCA = {
+    "GOOGLE": ("Número original (Google)", "https://www.google.com/search?q={q}"),
+    "MERCADOLIVRE": ("Mercado Livre", "https://lista.mercadolivre.com.br/{q}"),
+    "IMAGENS": ("Fotos da peça (Google Imagens)", "https://www.google.com/search?tbm=isch&q={q}"),
+}
 MAX_FOTOS = 10                       # fotos por envio (no cadastro ou ao adicionar depois)
 MAX_FOTOS_PROBLEMA = 5               # fotos de um mesmo problema/serviço
 MAX_FOTOS_VEICULO = 20               # fotos de um veículo, no total
@@ -446,6 +454,9 @@ def init_db():
     for tabela in ("entrega_itens", "entrega_itens_desfeitos"):
         if "pecas_centavos" not in [c[1] for c in db.execute(f"PRAGMA table_info({tabela})")]:
             db.execute(f"ALTER TABLE {tabela} ADD COLUMN pecas_centavos INTEGER NOT NULL DEFAULT 0")
+    # Peça de referência de cada serviço: número original e onde comprar (só anotação, não entra no orçamento)
+    if "referencia_peca" not in colunas:
+        db.execute("ALTER TABLE servicos ADD COLUMN referencia_peca TEXT")
     # Telefone (WhatsApp) do cliente, só dígitos com DDD; opcional
     colunas_veiculos = [c[1] for c in db.execute("PRAGMA table_info(veiculos)")]
     if "telefone" not in colunas_veiculos:
@@ -1378,7 +1389,8 @@ def pagina_veiculo(id, erros=None, dados=None):
         for p in db.execute("SELECT ep.* FROM entrega_pecas ep JOIN entrega_itens ei "
                             "ON ei.id = ep.entrega_item_id WHERE ei.entrega_id = ? ORDER BY ep.id", (entrega["id"],)):
             pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
-    return render_template("veiculo.html", pecas_servicos=pecas_servicos, itens_estoque=itens_estoque,
+    return render_template("veiculo.html", sites_busca=SITES_BUSCA, max_peca_busca=MAX_PECA_BUSCA,
+                           max_referencia=MAX_REFERENCIA, pecas_servicos=pecas_servicos, itens_estoque=itens_estoque,
                            grupos_estoque=grupos_estoque,
                            pecas_entrega=pecas_entrega, etapa=etapa, etapas=ETAPAS, historico_etapas=historico_etapas,
                            proximas_etapas=MUDANCAS_DE_ETAPA[etapa],
@@ -1459,6 +1471,51 @@ def registrar_resolucao(id, servico_id):
 
     db.execute("UPDATE servicos SET como_resolver = ?, resolvido_por = ? WHERE id = ?",
                (texto, g.usuario["nome"], servico_id))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/pecas/buscar")
+def buscar_peca_na_web(id):
+    """Abre a pesquisa de uma peça na Web, já com marca, modelo e ano do veículo e pedindo o número original,
+    para comprar na autopeça a peça certa. O sistema só monta o endereço: quem decide a compra é a pessoa.
+    Só abre os sites da lista SITES_BUSCA (o texto digitado vai apenas dentro da pesquisa)."""
+    db = get_db()
+    veiculo = buscar_veiculo(db, id)
+    peca = " ".join(request.args.get("peca", "").split())
+    site = request.args.get("site", "").upper()
+    erros = []
+    if site not in SITES_BUSCA:
+        erros.append("Escolha onde pesquisar a peça.")
+    if sum(1 for letra in peca if letra.isalpha()) < 3:
+        erros.append("Escreva qual peça procurar (exemplo: pastilha de freio dianteira).")
+    elif len(peca) > MAX_PECA_BUSCA:
+        erros.append(f"O nome da peça pode ter no máximo {MAX_PECA_BUSCA} letras.")
+    if not (veiculo["marca"] or "").strip() or not (veiculo["modelo"] or "").strip():
+        erros.append("Cadastre a marca e o modelo do veículo para pesquisar a peça certa para ele.")
+    if erros:
+        return pagina_veiculo(id, erros)
+    carro = " ".join(p for p in (veiculo["marca"], veiculo["modelo"], veiculo["ano"]) if p and p.strip())
+    texto = f"{peca} {carro}" + (" número original OEM código" if site == "GOOGLE" else "")
+    if site == "MERCADOLIVRE":      # o Mercado Livre pede a pesquisa com hífens no lugar dos espaços
+        codificado = quote("-".join(texto.lower().split()), safe="-")
+    else:
+        codificado = quote_plus(texto)
+    return redirect(SITES_BUSCA[site][1].format(q=codificado))
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/referencia", methods=["POST"])
+def registrar_referencia(id, servico_id):
+    """Anota a peça de referência do serviço (número original, onde comprar). É só lembrete: não muda o orçamento.
+    Dá para apagar deixando vazio."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    if not db.execute("SELECT 1 FROM servicos WHERE id = ? AND veiculo_id = ?", (servico_id, id)).fetchone():
+        abort(404)
+    texto = " ".join(request.form.get("referencia", "").split())
+    if len(texto) > MAX_REFERENCIA:
+        return pagina_veiculo(id, [f"A anotação da peça pode ter no máximo {MAX_REFERENCIA} letras."])
+    db.execute("UPDATE servicos SET referencia_peca = ? WHERE id = ?", (texto or None, servico_id))
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
 

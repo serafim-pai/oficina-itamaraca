@@ -127,6 +127,7 @@
             <th>Tipo</th>
             <th>Problema</th>
             <th>Como resolver</th>
+            <th>Peça de referência</th>
             <th>Valor do serviço</th>
             <th>Peças e tintas</th>
             <th>Garantia</th>
@@ -183,6 +184,39 @@
                 </form>
                 {% endif %}
                 {% if s['como_resolver'] %}<span class="aviso">Por {{ s['resolvido_por'] }}</span>{% endif %}
+            </td>
+            <td class="referencia-peca">
+                {% if s['referencia_peca'] %}<p>{{ s['referencia_peca'] }}</p>{% elif entrega %}-{% endif %}
+                {% if not entrega %}
+                <details>
+                    <summary>🔎 Pesquisar peça na Web</summary>
+                    {% if veiculo['marca'] and veiculo['modelo'] %}
+                    <form method="GET" action="{{ url_for('buscar_peca_na_web', id=veiculo['id']) }}" target="_blank" rel="noopener">
+                        <input type="text" name="peca" maxlength="{{ max_peca_busca }}" aria-label="Peça a pesquisar"
+                               placeholder="Peça (ex.: pastilha de freio dianteira)">
+                        <span class="aviso">Pesquisa para {{ veiculo['marca'] }} {{ veiculo['modelo'] }} {{ veiculo['ano'] or '' }},
+                            pedindo o número original. Confira o número antes de comprar.</span>
+                        <div class="botoes-busca">
+                            {% for chave, (rotulo, _) in sites_busca.items() %}
+                            <button type="submit" name="site" value="{{ chave }}">{{ rotulo }}</button>
+                            {% endfor %}
+                        </div>
+                    </form>
+                    {% else %}
+                    <p class="aviso">Cadastre a marca e o modelo do veículo para pesquisar a peça certa para ele.</p>
+                    {% endif %}
+                </details>
+                <details>
+                    <summary>{{ '✏️ Mudar anotação' if s['referencia_peca'] else '📝 Anotar número original' }}</summary>
+                    <form method="POST" action="{{ url_for('registrar_referencia', id=veiculo['id'], servico_id=s['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <textarea name="referencia" rows="3" maxlength="{{ max_referencia }}" aria-label="Peça de referência"
+                                  placeholder="Número original, loja, preço visto...">{{ s['referencia_peca'] or '' }}</textarea>
+                        <span class="aviso">Só lembrete para a compra: não entra no orçamento. Vazio apaga.</span>
+                        <button type="submit">Salvar</button>
+                    </form>
+                </details>
+                {% endif %}
             </td>
             <td class="valor">
                 {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
