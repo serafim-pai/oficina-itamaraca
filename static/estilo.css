@@ -245,5 +245,5 @@ table.estoque .col-curta { width: 1%; padding-left: 6px; padding-right: 6px; tex
 summary { cursor: pointer; }
 td.referencia-peca details { margin-top: 6px; font-size: 13px; }
 td.referencia-peca p { margin: 0 0 6px; }
-.botoes-busca { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.botoes-busca button { width: auto; }
+.botoes-busca { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.botoes-busca button { width: 100%; margin-top: 0; }
