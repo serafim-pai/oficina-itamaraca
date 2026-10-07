@@ -237,7 +237,7 @@ td.acoes-estoque input, td.acoes-estoque select { margin: 3px 0; }
 td.pecas .peca-usada { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
 td.pecas details.usar-peca { margin-top: 8px; font-size: 13px; }
 td.serve-para { font-size: 13px; white-space: nowrap; }
-form.busca-estoque { flex-direction: row; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+form.busca-estoque, form.busca-veiculos { flex-direction: row; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
 form.busca-estoque input[type=search] { flex: 1 1 260px; width: auto; min-width: 0; padding: 6px; box-sizing: border-box; }
 form.busca-estoque button { width: auto; margin-top: 0; }
 table.estoque .col-curta { width: 1%; padding-left: 6px; padding-right: 6px; text-align: center; }

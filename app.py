@@ -899,6 +899,16 @@ def situacao_garantia(garantia_ate, hoje):
     return "VIGENTE", f"Vigente até {formatar_data(garantia_ate)}"
 
 
+def veiculo_combina_com_busca(veiculo, busca):
+    """Busca na lista de veículos: cada palavra digitada precisa aparecer em algum destes dados do veículo:
+    placa, responsável, marca, modelo, cor, ano, chassi ou telefone. Não importa maiúscula, acento, hífen
+    nem espaço (ABC-1D23 acha ABC1D23; "joao" acha JOÃO)."""
+    campos = ("placa", "responsavel", "marca", "modelo", "cor", "ano", "chassi", "telefone")
+    texto = "|".join(normalizar(veiculo[c]) for c in campos)
+    palavras = [normalizar(p) for p in busca.split()]
+    return all(p in texto for p in palavras if p)
+
+
 def pagina_inicial(erros=None, dados=None):
     """Desenha a tela de cadastro com a lista de veículos e as fotos de cada um."""
     db = get_db()
@@ -908,10 +918,15 @@ def pagina_inicial(erros=None, dados=None):
         cadastrado = db.execute("SELECT id, placa FROM veiculos WHERE id = ?",
                                 (int(request.args["cadastrado"]),)).fetchone()
     veiculos = db.execute("SELECT * FROM veiculos ORDER BY id DESC").fetchall()
+    total_veiculos = len(veiculos)
+    busca = " ".join(request.args.get("q", "").split())[:60] if request.method == "GET" else ""
+    if busca:
+        veiculos = [v for v in veiculos if veiculo_combina_com_busca(v, busca)]
     fotos = {}
     for foto in db.execute("SELECT id, veiculo_id FROM fotos WHERE momento = 'ENTRADA' ORDER BY id"):
         fotos.setdefault(foto["veiculo_id"], []).append(foto["id"])
-    return render_template("index.html", veiculos=veiculos, fotos=fotos, erros=erros or [],
+    return render_template("index.html", busca=busca, total_veiculos=total_veiculos,
+                           veiculos=veiculos, fotos=fotos, erros=erros or [],
                            dados=dados or {}, cadastrado=cadastrado, excluido=excluido, max_fotos=MAX_FOTOS,
                            max_mb=MAX_BYTES_FOTO // (1024 * 1024),
                            situacoes=situacoes_dos_veiculos(db, veiculos),

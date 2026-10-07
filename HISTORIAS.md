@@ -249,3 +249,11 @@ Editar um problema registrado:
 Os problemas registrados aparecem como **cartões** (um por serviço, com tipo, problema, como resolver, peça de
 referência, valor, peças, garantia, quem registrou e data empilhados), em vez de uma tabela larga com
 rolagem para o lado. Nada mudou no que cada campo faz.
+
+Buscar na lista de veículos:
+- A lista tem uma caixa de busca por **placa** ou **nome do responsável** (também acha por marca, modelo,
+  cor, ano, chassi e telefone). Serve, por exemplo, quando o cliente deixou o documento do carro e não
+  lembra a placa: basta procurar pelo nome.
+- Não importa maiúscula, acento, hífen nem espaço (ABC-1D23 acha ABC1D23; "joao" acha JOÃO). Vale um pedaço
+  da placa ou do nome. Se forem digitadas várias palavras, todas precisam combinar com o mesmo veículo.
+- A tela mostra quantos veículos foram achados e tem "Limpar busca".

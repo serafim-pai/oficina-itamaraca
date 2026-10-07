@@ -75,7 +75,16 @@
         <button type="submit">Cadastrar</button>
     </form>
 
-    <h2>Veículos cadastrados</h2>
+    <h2 id="veiculos">Veículos cadastrados</h2>
+    {% if total_veiculos %}
+    <form method="GET" action="{{ url_for('index') }}#veiculos" class="busca-estoque busca-veiculos">
+        <input type="search" name="q" value="{{ busca }}" maxlength="60" aria-label="Buscar veículo"
+               placeholder="Buscar por placa ou nome (também marca, modelo, cor ou telefone)">
+        <button type="submit">Buscar</button>
+        {% if busca %}<a href="{{ url_for('index') }}#veiculos">Limpar busca</a>{% endif %}
+    </form>
+    {% if busca %}<p class="aviso">{{ veiculos|length }} de {{ total_veiculos }} veículos para "{{ busca }}".</p>{% endif %}
+    {% endif %}
     {% if veiculos %}
     <div class="tabela-rolavel">
     <table>
@@ -120,6 +129,8 @@
         {% endfor %}
     </table>
     </div>
+    {% elif busca %}
+    <p>Nenhum veículo encontrado para essa busca. Tente só uma parte do nome ou da placa.</p>
     {% else %}
     <p>Nenhum veículo cadastrado ainda.</p>
     {% endif %}
