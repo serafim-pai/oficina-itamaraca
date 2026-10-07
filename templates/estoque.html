@@ -12,6 +12,9 @@
     <p class="aviso">Tudo é contado em unidades inteiras (a tinta, por lata ou frasco). Ao usar um item em um serviço,
         a quantidade baixa aqui e o preço entra no orçamento do veículo.</p>
 
+    {% if salvo %}
+    <div class="ok">✔ Alterações salvas.</div>
+    {% endif %}
     {% if erros %}
     <div class="erros">
         <ul>
@@ -19,6 +22,7 @@
             <li>{{ erro }}</li>
             {% endfor %}
         </ul>
+        {% if editando %}<p><a href="#item-{{ editando }}">Ir para o formulário do item</a></p>{% endif %}
     </div>
     {% endif %}
 
@@ -42,7 +46,8 @@
     <table class="estoque">
         <tr><th>Item</th><th>Serve para</th><th>Tipo</th><th>Quantidade</th><th>Mínimo</th>{% if usuario and usuario['tipo'] == 'DONO' %}<th>Custo</th>{% endif %}<th>Preço de venda</th><th>Ações</th></tr>
         {% for i in itens %}
-        <tr>
+        {% set e = (editando == i['id']) %}
+        <tr id="item-{{ i['id'] }}">
             <td>{{ i['nome'] }}
                 {% if i['categoria'] or i['fabricante'] or i['codigo'] %}<br><span class="aviso">
                     {{ [i['categoria'], i['fabricante'], ('cód. ' ~ i['codigo']) if i['codigo'] else none]|select|join(' · ') }}</span>{% endif %}
@@ -77,22 +82,33 @@
                     </form>
                 </details>
                 {% if usuario and usuario['tipo'] == 'DONO' %}
-                <details>
+                <details {{ 'open' if e }}>
                     <summary>Editar</summary>
                     <form method="POST" action="{{ url_for('editar_item', id=i['id']) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="text" name="nome" maxlength="{{ max_nome }}" value="{{ i['nome'] }}" aria-label="Nome">
-                        <input type="text" name="categoria" maxlength="{{ max_texto }}" value="{{ i['categoria'] or '' }}" list="categorias" placeholder="Categoria" aria-label="Categoria">
-                        <input type="text" name="fabricante" maxlength="{{ max_texto }}" value="{{ i['fabricante'] or '' }}" placeholder="Fabricante (ex.: Fras-le)" aria-label="Fabricante">
-                        <input type="text" name="codigo" maxlength="{{ max_texto }}" value="{{ i['codigo'] or '' }}" placeholder="Código da peça" aria-label="Código da peça">
-                        <textarea name="aplicacoes" rows="3" placeholder="Serve para (uma linha por carro): FIAT / UNO / 2010-2015" aria-label="Serve para">{% for a in aplicacoes.get(i['id'], []) %}{{ texto_aplicacao(a) }}{% if not loop.last %}
-{% endif %}{% endfor %}</textarea>
-                        <select name="tipo" aria-label="Tipo">
-                            {% for t in tipos %}<option value="{{ t }}" {{ 'selected' if t == i['tipo'] }}>{{ t }}</option>{% endfor %}
+                        <label for="nome_{{ i['id'] }}">Nome</label>
+                        <input type="text" id="nome_{{ i['id'] }}" name="nome" maxlength="{{ max_nome }}" value="{{ valores.get('nome') if e else i['nome'] }}">
+                        <label for="categoria_{{ i['id'] }}">Categoria</label>
+                        <input type="text" id="categoria_{{ i['id'] }}" name="categoria" maxlength="{{ max_texto }}" value="{{ valores.get('categoria') if e else (i['categoria'] or '') }}" list="categorias">
+                        <label for="fabricante_{{ i['id'] }}">Fabricante (ex.: Fras-le)</label>
+                        <input type="text" id="fabricante_{{ i['id'] }}" name="fabricante" maxlength="{{ max_texto }}" value="{{ valores.get('fabricante') if e else (i['fabricante'] or '') }}">
+                        <label for="codigo_{{ i['id'] }}">Código da peça</label>
+                        <input type="text" id="codigo_{{ i['id'] }}" name="codigo" maxlength="{{ max_texto }}" value="{{ valores.get('codigo') if e else (i['codigo'] or '') }}">
+                        <label for="aplicacoes_{{ i['id'] }}">Serve para quais carros?</label>
+                        <textarea id="aplicacoes_{{ i['id'] }}" name="aplicacoes" rows="4" placeholder="FIAT / UNO / 2010-2015">{% if e %}{{ valores.get('aplicacoes', '') }}{% else %}{% for a in aplicacoes.get(i['id'], []) %}{{ texto_aplicacao(a) }}{% if not loop.last %}
+{% endif %}{% endfor %}{% endif %}</textarea>
+                        <span class="aviso">Uma linha para cada carro, sempre assim: <strong>MARCA / MODELO / ANO</strong>
+                            (o ano é opcional). Exemplos: <code>FIAT / UNO / 2010-2015</code> e <code>VOLKSWAGEN / GOL</code>.</span>
+                        <label for="tipo_{{ i['id'] }}">Tipo</label>
+                        <select id="tipo_{{ i['id'] }}" name="tipo">
+                            {% for t in tipos %}<option value="{{ t }}" {{ 'selected' if t == (valores.get('tipo') if e else i['tipo']) }}>{{ t }}</option>{% endfor %}
                         </select>
-                        <input type="text" name="minimo" inputmode="numeric" maxlength="6" value="{{ i['minimo'] }}" aria-label="Estoque mínimo" placeholder="Mínimo">
-                        <input type="text" name="custo" inputmode="decimal" value="{{ formatar_dinheiro(i['custo_centavos'], false) }}" aria-label="Custo" placeholder="Custo">
-                        <input type="text" name="preco" inputmode="decimal" value="{{ formatar_dinheiro(i['preco_centavos'], false) }}" aria-label="Preço de venda" placeholder="Preço">
+                        <label for="minimo_{{ i['id'] }}">Estoque mínimo</label>
+                        <input type="text" id="minimo_{{ i['id'] }}" name="minimo" inputmode="numeric" maxlength="6" value="{{ valores.get('minimo') if e else i['minimo'] }}">
+                        <label for="custo_{{ i['id'] }}">Custo (R$)</label>
+                        <input type="text" id="custo_{{ i['id'] }}" name="custo" inputmode="decimal" value="{{ valores.get('custo') if e else formatar_dinheiro(i['custo_centavos'], false) }}">
+                        <label for="preco_{{ i['id'] }}">Preço de venda (R$)</label>
+                        <input type="text" id="preco_{{ i['id'] }}" name="preco" inputmode="decimal" value="{{ valores.get('preco') if e else formatar_dinheiro(i['preco_centavos'], false) }}">
                         <span class="aviso">O preço novo vale só para usos futuros.</span>
                         <button type="submit">Salvar</button>
                     </form>

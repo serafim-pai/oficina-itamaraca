@@ -2036,7 +2036,7 @@ def agrupar_por_aplicacao(itens, aplicacoes, veiculo):
     return [(titulo, lista) for titulo, lista in grupos if lista]
 
 
-def pagina_estoque(erros=None, dados=None, status=200):
+def pagina_estoque(erros=None, dados=None, status=200, editando=None, valores=None):
     db = get_db()
     itens = db.execute("SELECT * FROM estoque_itens WHERE ativo = 1 ORDER BY tipo, nome").fetchall()
     aplicacoes = aplicacoes_dos_itens(db)
@@ -2053,7 +2053,8 @@ def pagina_estoque(erros=None, dados=None, status=200):
         "LEFT JOIN veiculos v ON v.id = m.veiculo_id ORDER BY m.id DESC LIMIT 40").fetchall()
     valor_custo = sum(i["quantidade"] * i["custo_centavos"] for i in itens)
     valor_venda = sum(i["quantidade"] * i["preco_centavos"] for i in itens)
-    return render_template("estoque.html", itens=itens, inativos=inativos, movimentos=movimentos,
+    return render_template("estoque.html", editando=editando, valores=valores or {}, salvo=bool(request.args.get("salvo")),
+                           itens=itens, inativos=inativos, movimentos=movimentos,
                            aplicacoes=aplicacoes, texto_aplicacao=texto_aplicacao, busca=busca,
                            total_itens=total_itens, categorias=CATEGORIAS_SUGERIDAS, max_texto=MAX_TEXTO_ITEM,
                            max_aplicacoes=MAX_APLICACOES,
@@ -2134,7 +2135,7 @@ def cadastrar_item():
     if d["quantidade"]:
         mover_estoque(db, cursor.lastrowid, d["quantidade"], "INICIAL", "Cadastro do item")
     db.commit()
-    return redirect(url_for("estoque"))
+    return redirect(url_for("estoque", salvo=1))
 
 
 def buscar_item(db, id):
@@ -2153,14 +2154,16 @@ def editar_item(id):
     buscar_item(db, id)
     erros, d = ler_dados_do_item(db, item_id=id)
     if erros:
-        return pagina_estoque(erros)
+        # Nada é salvo; o formulário do item continua aberto, com o que a pessoa digitou
+        return pagina_estoque([f"Nada foi salvo no item {buscar_item(db, id)['nome']}. Corrija e salve de novo:"] + erros,
+                              editando=id, valores=d["texto"])
     db.execute("UPDATE estoque_itens SET nome = ?, tipo = ?, minimo = ?, custo_centavos = ?, preco_centavos = ?, "
                "categoria = ?, fabricante = ?, codigo = ? WHERE id = ?",
                (d["nome"], d["tipo"], d["minimo"], d["custo"], d["preco"], d["categoria"], d["fabricante"],
                 d["codigo"], id))
     gravar_aplicacoes(db, id, d["aplicacoes"])
     db.commit()
-    return redirect(url_for("estoque"))
+    return redirect(url_for("estoque", salvo=1))
 
 
 @app.route("/estoque/<int:id>/entrada", methods=["POST"])
@@ -2180,7 +2183,7 @@ def entrada_estoque(id):
         return pagina_estoque(erros)
     mover_estoque(db, id, quantidade, "ENTRADA", motivo or None)
     db.commit()
-    return redirect(url_for("estoque"))
+    return redirect(url_for("estoque", salvo=1))
 
 
 @app.route("/estoque/<int:id>/ajuste", methods=["POST"])
@@ -2203,7 +2206,7 @@ def ajuste_estoque(id):
         return pagina_estoque(erros)
     mover_estoque(db, id, contada - item["quantidade"], "AJUSTE", motivo)
     db.commit()
-    return redirect(url_for("estoque"))
+    return redirect(url_for("estoque", salvo=1))
 
 
 @app.route("/estoque/<int:id>/alternar", methods=["POST"])
@@ -2214,7 +2217,7 @@ def alternar_item(id):
     item = buscar_item(db, id)
     db.execute("UPDATE estoque_itens SET ativo = ? WHERE id = ?", (0 if item["ativo"] else 1, id))
     db.commit()
-    return redirect(url_for("estoque"))
+    return redirect(url_for("estoque", salvo=1))
 
 
 @app.route("/veiculos/<int:id>/servicos/<int:servico_id>/pecas", methods=["POST"])

@@ -408,3 +408,47 @@ class CategoriaEAplicacaoTest(test_entrega.EntregaBase):
         with s3.connect(arquivo) as b:
             colunas = [c[1] for c in b.execute("PRAGMA table_info(estoque_itens)")]
         self.assertTrue({"categoria", "fabricante", "codigo"} <= set(colunas))
+
+
+class FeedbackAoSalvarTest(EstoqueBase):
+    def setUp(self):
+        super().setUp()
+        self.cadastrar()
+        self.iid = self.item()["id"]
+
+    def editar(self, **extra):
+        dados = {"nome": "Pastilha de freio", "tipo": "PEÇA", "minimo": "3", "custo": "35,00", "preco": "60,00",
+                 "categoria": "Pastilha de freio", "fabricante": "Fras-le", "codigo": "PD22",
+                 "aplicacoes": "FIAT / UNO / 2010-2015"}
+        dados.update(extra)
+        return self.dono_c.post(f"/estoque/{self.iid}/editar", data=dados)
+
+    def test_salvar_mostra_confirmacao(self):
+        r = self.editar()
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("salvo=1", r.headers["Location"])
+        pagina = self.dono_c.get(r.headers["Location"]).data.decode()
+        self.assertIn("Alterações salvas", pagina)
+        self.assertNotIn("Alterações salvas", self.dono_c.get("/estoque").data.decode())
+
+    def test_entrada_e_cadastro_tambem_confirmam(self):
+        r = self.func.post(f"/estoque/{self.iid}/entrada", data={"quantidade": "2"})
+        self.assertIn("salvo=1", r.headers["Location"])
+        self.assertIn("salvo=1", self.cadastrar(nome="Outro item").headers["Location"])
+
+    def test_formato_errado_nao_salva_mas_mantem_o_que_foi_digitado(self):
+        r = self.editar(aplicacoes="Fiat Uno 2010 e Gol")
+        pagina = r.data.decode()
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Nada foi salvo no item Pastilha de freio", pagina)
+        self.assertIn("MARCA / MODELO / ANO", pagina)
+        self.assertIn("Fiat Uno 2010 e Gol", pagina)                 # o texto digitado não se perde
+        self.assertIn(f'href="#item-{self.iid}"', pagina)             # link para o formulário do item
+        self.assertRegex(pagina, r"<details open>\s*<summary>Editar")   # e o formulário continua aberto
+        self.assertEqual(self.sql("SELECT COUNT(*) AS n FROM estoque_aplicacoes")[0]["n"], 0)
+
+    def test_erro_em_outro_campo_tambem_mantem_o_digitado(self):
+        pagina = self.editar(preco="abc", fabricante="Marca Nova").data.decode()
+        self.assertIn("Informe o preço de venda", pagina)
+        self.assertIn('value="Marca Nova"', pagina)
+        self.assertEqual(self.item()["preco_centavos"], 6000)
