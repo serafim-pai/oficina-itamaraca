@@ -29,13 +29,25 @@
     {% endfor %}
 
     <h2>Itens em estoque</h2>
+    <form method="GET" action="{{ url_for('estoque') }}" class="busca-estoque">
+        <input type="search" name="q" value="{{ busca }}" maxlength="80" aria-label="Buscar no estoque"
+               placeholder="Buscar por nome, categoria, fabricante, código ou carro (ex.: Uno)">
+        <button type="submit">Buscar</button>
+        {% if busca %}<a href="{{ url_for('estoque') }}">Limpar busca</a>{% endif %}
+    </form>
+    {% if busca %}<p class="aviso">{{ itens|length }} de {{ total_itens }} itens para "{{ busca }}".</p>{% endif %}
+    <datalist id="categorias">{% for c in categorias %}<option value="{{ c }}">{% endfor %}</datalist>
     {% if itens %}
     <div class="tabela-rolavel">
     <table class="estoque">
-        <tr><th>Item</th><th>Tipo</th><th>Quantidade</th><th>Mínimo</th>{% if usuario and usuario['tipo'] == 'DONO' %}<th>Custo</th>{% endif %}<th>Preço de venda</th><th>Ações</th></tr>
+        <tr><th>Item</th><th>Serve para</th><th>Tipo</th><th>Quantidade</th><th>Mínimo</th>{% if usuario and usuario['tipo'] == 'DONO' %}<th>Custo</th>{% endif %}<th>Preço de venda</th><th>Ações</th></tr>
         {% for i in itens %}
         <tr>
-            <td>{{ i['nome'] }}</td>
+            <td>{{ i['nome'] }}
+                {% if i['categoria'] or i['fabricante'] or i['codigo'] %}<br><span class="aviso">
+                    {{ [i['categoria'], i['fabricante'], ('cód. ' ~ i['codigo']) if i['codigo'] else none]|select|join(' · ') }}</span>{% endif %}
+            </td>
+            <td class="serve-para">{% for a in aplicacoes.get(i['id'], []) %}{{ texto_aplicacao(a) }}{% if not loop.last %}<br>{% endif %}{% else %}-{% endfor %}</td>
             <td>{{ i['tipo'] }}</td>
             <td class="num">
                 {{ i['quantidade'] }}
@@ -70,6 +82,11 @@
                     <form method="POST" action="{{ url_for('editar_item', id=i['id']) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="text" name="nome" maxlength="{{ max_nome }}" value="{{ i['nome'] }}" aria-label="Nome">
+                        <input type="text" name="categoria" maxlength="{{ max_texto }}" value="{{ i['categoria'] or '' }}" list="categorias" placeholder="Categoria" aria-label="Categoria">
+                        <input type="text" name="fabricante" maxlength="{{ max_texto }}" value="{{ i['fabricante'] or '' }}" placeholder="Fabricante (ex.: Fras-le)" aria-label="Fabricante">
+                        <input type="text" name="codigo" maxlength="{{ max_texto }}" value="{{ i['codigo'] or '' }}" placeholder="Código da peça" aria-label="Código da peça">
+                        <textarea name="aplicacoes" rows="3" placeholder="Serve para (uma linha por carro): FIAT / UNO / 2010-2015" aria-label="Serve para">{% for a in aplicacoes.get(i['id'], []) %}{{ texto_aplicacao(a) }}{% if not loop.last %}
+{% endif %}{% endfor %}</textarea>
                         <select name="tipo" aria-label="Tipo">
                             {% for t in tipos %}<option value="{{ t }}" {{ 'selected' if t == i['tipo'] }}>{{ t }}</option>{% endfor %}
                         </select>
@@ -94,6 +111,8 @@
     <p class="aviso">Valor do estoque:
         {% if usuario and usuario['tipo'] == 'DONO' %}{{ formatar_dinheiro(valor_custo) }} pelo custo,
         {{ formatar_dinheiro(valor_venda) }} pelo preço de venda.{% else %}{{ formatar_dinheiro(valor_venda) }} pelo preço de venda.{% endif %}</p>
+    {% elif busca %}
+    <p>Nenhum item encontrado para essa busca.</p>
     {% else %}
     <p>Nenhum item cadastrado ainda.</p>
     {% endif %}
@@ -104,6 +123,15 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="nome">Nome do item</label>
         <input type="text" id="nome" name="nome" maxlength="{{ max_nome }}" value="{{ dados.get('nome', '') }}" required>
+        <label for="categoria">Categoria (ex.: pastilha de freio, lona, disco de freio)</label>
+        <input type="text" id="categoria" name="categoria" maxlength="{{ max_texto }}" list="categorias" value="{{ dados.get('categoria', '') }}">
+        <label for="fabricante">Fabricante (ex.: Fras-le)</label>
+        <input type="text" id="fabricante" name="fabricante" maxlength="{{ max_texto }}" value="{{ dados.get('fabricante', '') }}">
+        <label for="codigo">Código da peça (o do catálogo ou da embalagem)</label>
+        <input type="text" id="codigo" name="codigo" maxlength="{{ max_texto }}" value="{{ dados.get('codigo', '') }}">
+        <label for="aplicacoes">Serve para quais carros? Uma linha por carro: MARCA / MODELO / ANO</label>
+        <textarea id="aplicacoes" name="aplicacoes" rows="4" placeholder="FIAT / UNO / 2010-2015&#10;VOLKSWAGEN / GOL / 2008">{{ dados.get('aplicacoes', '') }}</textarea>
+        <span class="aviso">O ano é opcional (pode ser um só, como 2008, ou um período). Até {{ max_aplicacoes }} carros. Para tinta e itens que servem em qualquer carro, deixe vazio.</span>
         <label for="tipo">Tipo</label>
         <select id="tipo" name="tipo" required>
             <option value="">Escolha...</option>

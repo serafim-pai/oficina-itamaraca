@@ -38,7 +38,7 @@ class BaseTest(unittest.TestCase):
         for tabela in ("veiculos", "usuarios", "tentativas_login", "fotos", "servicos", "aprovacoes", "prazos",
                        "entregas", "entrega_itens", "limites_garantia", "entregas_desfeitas", "estoque_itens", "estoque_movimentos", "servico_pecas", "entrega_pecas",
                        "entrega_itens_desfeitos", "fotos_historico", "veiculos_excluidos", "etapas", "estoque_itens", "estoque_movimentos",
-                       "servico_pecas", "entrega_pecas"):
+                       "servico_pecas", "entrega_pecas", "estoque_aplicacoes"):
             self.sql(f"DELETE FROM {tabela}")
         for arquivo in os.listdir(oficina.PASTA_FOTOS):
             os.remove(os.path.join(oficina.PASTA_FOTOS, arquivo))

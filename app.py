@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 import sqlite3
+import unicodedata
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 from urllib.parse import quote
@@ -75,6 +76,13 @@ TIPOS_ESTOQUE = ("PEÇA", "TINTA")    # história 9: estoque de peças e tintas 
 MAX_NOME_ITEM = 80                   # letras do nome de um item do estoque
 MAX_QUANTIDADE = 100_000             # limite de sanidade para quantidades de estoque
 MAX_MOTIVO_ESTOQUE = 200             # letras da observação de uma movimentação
+MAX_TEXTO_ITEM = 40                  # letras da categoria, do fabricante e do código de um item
+MAX_APLICACOES = 40                  # carros em que um item serve (uma linha para cada)
+# Sugestões de categoria (o usuário pode escrever outra). Seguem o tipo de catálogo de autopeças.
+CATEGORIAS_SUGERIDAS = ("Pastilha de freio", "Lona de freio", "Sapata de freio", "Disco de freio", "Tambor de freio",
+                        "Cilindro de freio", "Fluido de freio", "Kit de embreagem", "Disco de embreagem",
+                        "Platô de embreagem", "Filtro", "Correia", "Amortecedor", "Vela", "Lâmpada", "Tinta",
+                        "Verniz", "Massa", "Outra")
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 60 * 1024 * 1024     # tamanho máximo de um envio inteiro
@@ -348,6 +356,19 @@ def init_db():
         )
         """
     )
+    # Em quais carros cada item serve (uma linha por marca/modelo, com anos opcionais)
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS estoque_aplicacoes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER NOT NULL,
+            marca TEXT NOT NULL,
+            modelo TEXT NOT NULL,
+            ano_de INTEGER,
+            ano_ate INTEGER
+        )
+        """
+    )
     # Peças/tintas usadas em um serviço: guardam nome, preço e custo da hora do uso (mudar o preço do
     # estoque depois não mexe no orçamento já feito).
     db.execute(
@@ -414,6 +435,11 @@ def init_db():
         db.execute("ALTER TABLE servicos ADD COLUMN garantia_valor INTEGER")
     if "garantia_unidade" not in colunas:
         db.execute("ALTER TABLE servicos ADD COLUMN garantia_unidade TEXT")
+    # Categoria, fabricante e código de cada item do estoque (bancos criados antes não têm)
+    colunas_itens = [c[1] for c in db.execute("PRAGMA table_info(estoque_itens)")]
+    for coluna in ("categoria", "fabricante", "codigo"):
+        if coluna not in colunas_itens:
+            db.execute(f"ALTER TABLE estoque_itens ADD COLUMN {coluna} TEXT")
     # História 9: soma (em centavos) das peças usadas no serviço; entra no orçamento junto com o valor do serviço
     if "pecas_centavos" not in colunas:
         db.execute("ALTER TABLE servicos ADD COLUMN pecas_centavos INTEGER NOT NULL DEFAULT 0")
@@ -1327,6 +1353,7 @@ def pagina_veiculo(id, erros=None, dados=None):
         pecas_servicos.setdefault(p["servico_id"], []).append(p)
     itens_estoque = db.execute("SELECT * FROM estoque_itens WHERE ativo = 1 AND quantidade > 0 "
                                "ORDER BY tipo, nome").fetchall()
+    grupos_estoque = agrupar_por_aplicacao(itens_estoque, aplicacoes_dos_itens(db), veiculo)
     faltam = sum(1 for s in servicos if s["valor_centavos"] is None)
     orcamento_completo = bool(servicos) and faltam == 0
     aprovacoes = db.execute("SELECT * FROM aprovacoes WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
@@ -1352,6 +1379,7 @@ def pagina_veiculo(id, erros=None, dados=None):
                             "ON ei.id = ep.entrega_item_id WHERE ei.entrega_id = ? ORDER BY ep.id", (entrega["id"],)):
             pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
     return render_template("veiculo.html", pecas_servicos=pecas_servicos, itens_estoque=itens_estoque,
+                           grupos_estoque=grupos_estoque,
                            pecas_entrega=pecas_entrega, etapa=etapa, etapas=ETAPAS, historico_etapas=historico_etapas,
                            proximas_etapas=MUDANCAS_DE_ETAPA[etapa],
                            link_whatsapp_pronto=(link_whatsapp_pronto(veiculo)
@@ -1920,9 +1948,105 @@ def devolver_pecas(db, condicao, parametros, motivo):
     db.execute(f"DELETE FROM servico_pecas WHERE {condicao}", parametros)
 
 
+def normalizar(texto):
+    """Maiúsculas, sem acento e só letras e números: para comparar marca, modelo e busca."""
+    sem_acento = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode()
+    return "".join(c for c in sem_acento.upper() if c.isalnum())
+
+
+def interpretar_aplicacoes(texto):
+    """Lê o campo "serve para": uma linha por carro, no formato MARCA / MODELO / ANO (o ano é opcional e pode
+    ser um período, como 2010-2015). Devolve (lista de (marca, modelo, ano_de, ano_ate), erros)."""
+    linhas, erros = [], []
+    for numero, bruto in enumerate(texto.replace("\r", "").split("\n"), 1):
+        linha = " ".join(bruto.split())
+        if not linha:
+            continue
+        partes = [p.strip() for p in linha.split("/")]
+        exemplo = f"Linha {numero} do campo \"serve para\": use MARCA / MODELO / ANO (exemplo: FIAT / UNO / 2010-2015)."
+        if not 2 <= len(partes) <= 3 or not partes[0] or not partes[1]:
+            erros.append(exemplo)
+            continue
+        if len(partes[0]) > MAX_TEXTO_ITEM or len(partes[1]) > MAX_TEXTO_ITEM:
+            erros.append(f"Linha {numero} do campo \"serve para\": marca e modelo podem ter no máximo {MAX_TEXTO_ITEM} letras.")
+            continue
+        ano_de = ano_ate = None
+        if len(partes) == 3 and partes[2]:
+            achou = re.fullmatch(r"(\d{4})(?:\s*-\s*(\d{4}))?", partes[2])
+            if not achou:
+                erros.append(exemplo)
+                continue
+            ano_de, ano_ate = int(achou.group(1)), int(achou.group(2) or achou.group(1))
+            if ano_ate < ano_de or ano_de < 1900 or ano_ate > 2100:
+                erros.append(f"Linha {numero} do campo \"serve para\": confira os anos (de 1900 a 2100, do menor para o maior).")
+                continue
+        linhas.append((partes[0].upper(), partes[1].upper(), ano_de, ano_ate))
+    if len(linhas) > MAX_APLICACOES:
+        erros.append(f"Informe no máximo {MAX_APLICACOES} carros por item.")
+    return linhas, erros
+
+
+def texto_aplicacao(a):
+    """Uma aplicação como aparece na tela e no campo de edição: FIAT / UNO / 2010-2015."""
+    ano = ""
+    if a["ano_de"]:
+        ano = str(a["ano_de"]) if a["ano_de"] == a["ano_ate"] else f"{a['ano_de']}-{a['ano_ate']}"
+    return f"{a['marca']} / {a['modelo']}" + (f" / {ano}" if ano else "")
+
+
+def aplicacoes_dos_itens(db):
+    """Aplicações de todos os itens, agrupadas pelo código do item."""
+    resultado = {}
+    for a in db.execute("SELECT * FROM estoque_aplicacoes ORDER BY id"):
+        resultado.setdefault(a["item_id"], []).append(a)
+    return resultado
+
+
+def serve_no_veiculo(aplicacoes, veiculo):
+    """Alguma das aplicações do item combina com a marca, o modelo e o ano do veículo?
+    O nome do modelo conta quando um contém o outro (UNO serve para UNO MILLE)."""
+    marca, modelo = normalizar(veiculo["marca"]), normalizar(veiculo["modelo"])
+    achou_ano = re.search(r"\d{4}", veiculo["ano"] or "")
+    ano = int(achou_ano.group()) if achou_ano else None
+    for a in aplicacoes:
+        a_marca, a_modelo = normalizar(a["marca"]), normalizar(a["modelo"])
+        if not (marca and modelo and a_marca and a_modelo):
+            continue
+        if not (a_marca in marca or marca in a_marca) or not (a_modelo in modelo or modelo in a_modelo):
+            continue
+        if ano and a["ano_de"] and not a["ano_de"] <= ano <= a["ano_ate"]:
+            continue
+        return True
+    return False
+
+
+def agrupar_por_aplicacao(itens, aplicacoes, veiculo):
+    """Separa os itens para a lista "usar do estoque": os que servem no veículo vêm primeiro."""
+    servem, sem_aplicacao, outros = [], [], []
+    for i in itens:
+        do_item = aplicacoes.get(i["id"], [])
+        if not do_item:
+            sem_aplicacao.append(i)
+        elif serve_no_veiculo(do_item, veiculo):
+            servem.append(i)
+        else:
+            outros.append(i)
+    grupos = [("Serve neste veículo", servem), ("Sem carro informado (tintas e itens universais)", sem_aplicacao),
+              ("Serve em outros carros", outros)]
+    return [(titulo, lista) for titulo, lista in grupos if lista]
+
+
 def pagina_estoque(erros=None, dados=None, status=200):
     db = get_db()
     itens = db.execute("SELECT * FROM estoque_itens WHERE ativo = 1 ORDER BY tipo, nome").fetchall()
+    aplicacoes = aplicacoes_dos_itens(db)
+    busca = " ".join(request.args.get("q", "").split())[:80]
+    total_itens = len(itens)
+    if busca:             # procura o texto no nome, categoria, fabricante, código e nos carros do item
+        alvo = normalizar(busca)
+        itens = [i for i in itens if alvo in normalizar(" ".join(
+            [i["nome"], i["categoria"] or "", i["fabricante"] or "", i["codigo"] or ""]
+            + [texto_aplicacao(a) for a in aplicacoes.get(i["id"], [])]))]
     inativos = db.execute("SELECT * FROM estoque_itens WHERE ativo = 0 ORDER BY tipo, nome").fetchall()
     movimentos = db.execute(
         "SELECT m.*, i.nome, v.placa FROM estoque_movimentos m JOIN estoque_itens i ON i.id = m.item_id "
@@ -1930,6 +2054,9 @@ def pagina_estoque(erros=None, dados=None, status=200):
     valor_custo = sum(i["quantidade"] * i["custo_centavos"] for i in itens)
     valor_venda = sum(i["quantidade"] * i["preco_centavos"] for i in itens)
     return render_template("estoque.html", itens=itens, inativos=inativos, movimentos=movimentos,
+                           aplicacoes=aplicacoes, texto_aplicacao=texto_aplicacao, busca=busca,
+                           total_itens=total_itens, categorias=CATEGORIAS_SUGERIDAS, max_texto=MAX_TEXTO_ITEM,
+                           max_aplicacoes=MAX_APLICACOES,
                            valor_custo=valor_custo, valor_venda=valor_venda, tipos=TIPOS_ESTOQUE,
                            nomes_movimento=NOMES_MOVIMENTO, formatar_dinheiro=formatar_dinheiro,
                            max_nome=MAX_NOME_ITEM, max_quantidade=MAX_QUANTIDADE, max_motivo=MAX_MOTIVO_ESTOQUE,
@@ -1951,6 +2078,12 @@ def ler_dados_do_item(db, item_id=None, com_quantidade=False):
     minimo = 0 if not request.form.get("minimo", "").strip() else interpretar_quantidade(request.form["minimo"], 0)
     quantidade = 0
     erros = []
+    categoria, fabricante, codigo = (" ".join(request.form.get(c, "").split()) for c in ("categoria", "fabricante", "codigo"))
+    for rotulo, valor in (("categoria", categoria), ("fabricante", fabricante), ("código", codigo)):
+        if len(valor) > MAX_TEXTO_ITEM:
+            erros.append(f"O campo {rotulo} pode ter no máximo {MAX_TEXTO_ITEM} letras.")
+    aplicacoes, erros_aplicacao = interpretar_aplicacoes(request.form.get("aplicacoes", ""))
+    erros += erros_aplicacao
     if sum(1 for letra in nome if letra.isalnum()) < 2:
         erros.append("Informe o nome do item (exemplo: Pastilha de freio dianteira).")
     elif len(nome) > MAX_NOME_ITEM:
@@ -1973,7 +2106,16 @@ def ler_dados_do_item(db, item_id=None, com_quantidade=False):
         if repetido:
             erros.append("Já existe um item com esse nome e esse tipo. Dê entrada nele em vez de cadastrar de novo.")
     return erros, {"nome": nome, "tipo": tipo, "quantidade": quantidade, "minimo": minimo, "custo": custo, "preco": preco,
-                   "texto": {k: request.form.get(k, "") for k in ("nome", "tipo", "quantidade", "minimo", "custo", "preco")}}
+                   "categoria": categoria or None, "fabricante": fabricante or None, "codigo": codigo or None,
+                   "aplicacoes": aplicacoes,
+                   "texto": {k: request.form.get(k, "") for k in ("nome", "tipo", "quantidade", "minimo", "custo", "preco",
+                                                                  "categoria", "fabricante", "codigo", "aplicacoes")}}
+
+
+def gravar_aplicacoes(db, item_id, aplicacoes):
+    db.execute("DELETE FROM estoque_aplicacoes WHERE item_id = ?", (item_id,))
+    db.executemany("INSERT INTO estoque_aplicacoes (item_id, marca, modelo, ano_de, ano_ate) VALUES (?, ?, ?, ?, ?)",
+                   [(item_id,) + tuple(a) for a in aplicacoes])
 
 
 @app.route("/estoque/novo", methods=["POST"])
@@ -1984,9 +2126,11 @@ def cadastrar_item():
     erros, d = ler_dados_do_item(db, com_quantidade=True)
     if erros:
         return pagina_estoque(erros, d["texto"])
-    cursor = db.execute("INSERT INTO estoque_itens (nome, tipo, minimo, custo_centavos, preco_centavos, criado_por) "
-                        "VALUES (?, ?, ?, ?, ?, ?)",
-                        (d["nome"], d["tipo"], d["minimo"], d["custo"], d["preco"], g.usuario["nome"]))
+    cursor = db.execute("INSERT INTO estoque_itens (nome, tipo, minimo, custo_centavos, preco_centavos, criado_por, "
+                        "categoria, fabricante, codigo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (d["nome"], d["tipo"], d["minimo"], d["custo"], d["preco"], g.usuario["nome"],
+                         d["categoria"], d["fabricante"], d["codigo"]))
+    gravar_aplicacoes(db, cursor.lastrowid, d["aplicacoes"])
     if d["quantidade"]:
         mover_estoque(db, cursor.lastrowid, d["quantidade"], "INICIAL", "Cadastro do item")
     db.commit()
@@ -2002,7 +2146,7 @@ def buscar_item(db, id):
 
 @app.route("/estoque/<int:id>/editar", methods=["POST"])
 def editar_item(id):
-    """Muda nome, estoque mínimo, custo e preço. O preço novo só vale para usos futuros: o que já foi
+    """Muda nome, categoria, fabricante, código, carros em que serve, estoque mínimo, custo e preço. O preço novo só vale para usos futuros: o que já foi
     colocado em um orçamento guarda o preço da hora. Só o dono edita (custo e preço são dele)."""
     so_dono()
     db = get_db()
@@ -2010,8 +2154,11 @@ def editar_item(id):
     erros, d = ler_dados_do_item(db, item_id=id)
     if erros:
         return pagina_estoque(erros)
-    db.execute("UPDATE estoque_itens SET nome = ?, tipo = ?, minimo = ?, custo_centavos = ?, preco_centavos = ? WHERE id = ?",
-               (d["nome"], d["tipo"], d["minimo"], d["custo"], d["preco"], id))
+    db.execute("UPDATE estoque_itens SET nome = ?, tipo = ?, minimo = ?, custo_centavos = ?, preco_centavos = ?, "
+               "categoria = ?, fabricante = ?, codigo = ? WHERE id = ?",
+               (d["nome"], d["tipo"], d["minimo"], d["custo"], d["preco"], d["categoria"], d["fabricante"],
+                d["codigo"], id))
+    gravar_aplicacoes(db, id, d["aplicacoes"])
     db.commit()
     return redirect(url_for("estoque"))
 

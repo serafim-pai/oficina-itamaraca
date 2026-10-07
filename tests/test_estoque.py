@@ -311,3 +311,100 @@ class UsoNoServicoTest(test_entrega.EntregaBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CategoriaEAplicacaoTest(test_entrega.EntregaBase):
+    """Categoria, fabricante, código e "serve para" de cada item (referência: catálogo de autopeças)."""
+
+    def novo(self, nome="Pastilha Fras-le", aplicacoes="FIAT / UNO / 2010-2015\nVOLKSWAGEN / GOL", **extra):
+        dados = {"nome": nome, "tipo": "PEÇA", "quantidade": "5", "minimo": "1", "preco": "80,00",
+                 "categoria": "Pastilha de freio", "fabricante": "Fras-le", "codigo": "HQ 123",
+                 "aplicacoes": aplicacoes}
+        dados.update(extra)
+        return self.dono_c.post("/estoque/novo", data=dados)
+
+    def test_cadastra_com_categoria_fabricante_codigo_e_carros(self):
+        self.assertEqual(self.novo().status_code, 302)
+        i = self.sql("SELECT * FROM estoque_itens")[0]
+        self.assertEqual((i["categoria"], i["fabricante"], i["codigo"]), ("Pastilha de freio", "Fras-le", "HQ 123"))
+        a = self.sql("SELECT marca, modelo, ano_de, ano_ate FROM estoque_aplicacoes ORDER BY id")
+        self.assertEqual([tuple(x) for x in a], [("FIAT", "UNO", 2010, 2015), ("VOLKSWAGEN", "GOL", None, None)])
+        pagina = self.func.get("/estoque").data.decode()
+        self.assertIn("Fras-le", pagina)
+        self.assertIn("FIAT / UNO / 2010-2015", pagina)
+
+    def test_ano_unico_vira_periodo_de_um_ano(self):
+        self.novo(aplicacoes="FIAT / PALIO / 2008")
+        a = self.sql("SELECT ano_de, ano_ate FROM estoque_aplicacoes")[0]
+        self.assertEqual((a["ano_de"], a["ano_ate"]), (2008, 2008))
+
+    def test_linhas_mal_escritas_nao_salvam(self):
+        for ruim in ("FIAT", "FIAT / UNO / 20", "FIAT / UNO / 2015-2010", "/ UNO", "FIAT / UNO / abc"):
+            r = self.novo(aplicacoes=ruim)
+            self.assertIn("serve para".encode(), r.data, ruim)
+        self.assertEqual(self.sql("SELECT COUNT(*) AS n FROM estoque_itens")[0]["n"], 0)
+
+    def test_campos_muito_longos_nao_salvam(self):
+        r = self.novo(fabricante="X" * 41)
+        self.assertIn("no máximo".encode(), r.data)
+        self.assertEqual(self.sql("SELECT COUNT(*) AS n FROM estoque_itens")[0]["n"], 0)
+
+    def test_editar_troca_as_aplicacoes(self):
+        self.novo()
+        iid = self.sql("SELECT id FROM estoque_itens")[0]["id"]
+        self.dono_c.post(f"/estoque/{iid}/editar", data={
+            "nome": "Pastilha Fras-le", "tipo": "PEÇA", "minimo": "1", "preco": "80,00", "aplicacoes": "CHEVROLET / CELTA"})
+        a = self.sql("SELECT marca, modelo FROM estoque_aplicacoes")
+        self.assertEqual([tuple(x) for x in a], [("CHEVROLET", "CELTA")])
+
+    def test_busca_por_carro_codigo_e_fabricante(self):
+        self.novo()
+        self.novo(nome="Tinta azul", categoria="Tinta", fabricante="", codigo="", aplicacoes="", tipo="TINTA")
+        por_carro = self.func.get("/estoque?q=uno").data.decode()
+        self.assertIn("Pastilha Fras-le", por_carro)
+        self.assertIn("1 de 2 itens", por_carro)
+        self.assertNotIn('Tinta azul', por_carro.split('movimentações')[0])          # a tinta continua só nas movimentações
+        self.assertIn("Pastilha Fras-le", self.func.get("/estoque?q=hq123").data.decode())
+        self.assertIn("Pastilha Fras-le", self.func.get("/estoque?q=FRAS-LE").data.decode())
+        self.assertIn("Nenhum item encontrado", self.func.get("/estoque?q=ferrari").data.decode())
+
+    def test_modelo_parecido_conta_e_ano_fora_do_periodo_nao(self):
+        base = {"marca": "Fiat", "modelo": "Uno Mille", "ano": "2012"}
+        item = lambda ano_de, ano_ate, modelo="UNO": [{"marca": "FIAT", "modelo": modelo, "ano_de": ano_de, "ano_ate": ano_ate}]
+        self.assertTrue(oficina.serve_no_veiculo(item(2010, 2015), base))
+        self.assertTrue(oficina.serve_no_veiculo(item(None, None), base))
+        self.assertFalse(oficina.serve_no_veiculo(item(2000, 2005), base))
+        self.assertFalse(oficina.serve_no_veiculo(item(None, None, "GOL"), base))
+        self.assertTrue(oficina.serve_no_veiculo(item(2000, 2005), dict(base, ano="")))   # ano desconhecido não exclui
+
+    def test_lista_de_uso_mostra_primeiro_o_que_serve_no_carro(self):
+        self.sql("UPDATE veiculos SET marca = 'FIAT', modelo = 'UNO', ano = '2012'")
+        self.novo(nome="Pastilha do Uno")
+        self.novo(nome="Pastilha do Gol", aplicacoes="VOLKSWAGEN / GOL")
+        self.novo(nome="Tinta azul", tipo="TINTA", aplicacoes="", categoria="Tinta", fabricante="", codigo="")
+        html = self.pagina()
+        a, b, c = (html.index(x) for x in ("Serve neste veículo", "Sem carro informado", "Serve em outros carros"))
+        self.assertTrue(a < b < c)
+        self.assertLess(html.index("Pastilha do Uno"), html.index("Tinta azul"))
+        self.assertLess(html.index("Tinta azul"), html.index("Pastilha do Gol"))
+
+    def test_funcionario_nao_cadastra_com_aplicacao(self):
+        r = self.func.post("/estoque/novo", data={"nome": "X", "tipo": "PEÇA", "preco": "1,00", "aplicacoes": "FIAT / UNO"})
+        self.assertEqual(r.status_code, 403)
+
+    def test_banco_antigo_ganha_as_colunas_novas(self):
+        import sqlite3 as s3, os, tempfile
+        arquivo = os.path.join(tempfile.mkdtemp(), "antigo.db")
+        with s3.connect(arquivo) as b:
+            b.execute("CREATE TABLE estoque_itens (id INTEGER PRIMARY KEY, nome TEXT, tipo TEXT, quantidade INTEGER, "
+                      "minimo INTEGER, custo_centavos INTEGER, preco_centavos INTEGER, ativo INTEGER, criado_por TEXT, "
+                      "criado_em TEXT)")
+        anterior = oficina.DATABASE
+        oficina.DATABASE = arquivo
+        try:
+            oficina.init_db()
+        finally:
+            oficina.DATABASE = anterior
+        with s3.connect(arquivo) as b:
+            colunas = [c[1] for c in b.execute("PRAGMA table_info(estoque_itens)")]
+        self.assertTrue({"categoria", "fabricante", "codigo"} <= set(colunas))

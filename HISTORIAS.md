@@ -189,6 +189,13 @@ Combinado com o dono (ainda a confirmar com ele):
   contagem e usam em serviços.
 - Tudo é contado em **unidades inteiras** (tinta por lata ou frasco). Cada item tem nome, tipo (peça ou
   tinta), quantidade, estoque mínimo, custo e preço de venda. Não há dois itens com o mesmo nome e tipo.
+- Cada item tem também categoria (com sugestões como pastilha de freio, lona e disco; dá para escrever outra),
+  fabricante (por exemplo, Fras-le) e código da peça, como num catálogo de autopeças.
+- "Serve para": uma linha por carro, no formato `MARCA / MODELO / ANO` (o ano é opcional, um só ou um
+  período, como 2010-2015). Tinta e itens universais ficam sem carro. Ao usar uma peça em um serviço, a lista
+  mostra primeiro o que serve no veículo (marca e modelo parecidos e ano dentro do período), depois os itens
+  sem carro informado e por último os que servem em outros carros. Nada é bloqueado: a decisão é de quem monta.
+- A tela do estoque tem busca por nome, categoria, fabricante, código ou carro.
 - Quando a quantidade chega ao mínimo, a tela do estoque avisa "Estoque baixo"; zerado mostra "Acabou".
 - Toda mudança de quantidade (estoque inicial, entrada, uso, devolução, ajuste) fica numa lista que nunca
   é apagada: quem fez, quando, quanto, saldo depois, veículo e observação. O ajuste exige motivo.

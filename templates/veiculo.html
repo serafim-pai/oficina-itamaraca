@@ -217,8 +217,12 @@
                     <form method="POST" action="{{ url_for('usar_peca', id=veiculo['id'], servico_id=s['id']) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <select name="item_id" aria-label="Peça ou tinta">
-                            {% for i in itens_estoque %}
-                            <option value="{{ i['id'] }}">{{ i['nome'] }} ({{ i['tipo']|lower }}, {{ i['quantidade'] }} em estoque) - {{ formatar_dinheiro(i['preco_centavos']) }}</option>
+                            {% for titulo, lista in grupos_estoque %}
+                            <optgroup label="{{ titulo }}">
+                                {% for i in lista %}
+                                <option value="{{ i['id'] }}">{{ i['nome'] }}{% if i['fabricante'] %} - {{ i['fabricante'] }}{% endif %}{% if i['codigo'] %} ({{ i['codigo'] }}){% endif %} [{{ i['quantidade'] }} em estoque] - {{ formatar_dinheiro(i['preco_centavos']) }}</option>
+                                {% endfor %}
+                            </optgroup>
                             {% endfor %}
                         </select>
                         <input type="text" name="quantidade" inputmode="numeric" maxlength="6" value="1" aria-label="Quantidade usada">
