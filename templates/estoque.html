@@ -44,7 +44,7 @@
     {% if itens %}
     <div class="tabela-rolavel">
     <table class="estoque">
-        <tr><th>Item</th><th>Serve para</th><th>Tipo</th><th>Quantidade</th><th>Mínimo</th>{% if usuario and usuario['tipo'] == 'DONO' %}<th>Custo</th>{% endif %}<th>Preço de venda</th><th>Ações</th></tr>
+        <tr><th>Item</th><th>Serve para</th><th>Tipo</th><th class="col-curta" title="Quantidade em estoque">Quant.</th><th class="col-curta" title="Estoque mínimo">Mín.</th>{% if usuario and usuario['tipo'] == 'DONO' %}<th>Custo</th>{% endif %}<th>Preço de venda</th><th>Ações</th></tr>
         {% for i in itens %}
         {% set e = (editando == i['id']) %}
         <tr id="item-{{ i['id'] }}">
@@ -54,12 +54,12 @@
             </td>
             <td class="serve-para">{% for a in aplicacoes.get(i['id'], []) %}{{ texto_aplicacao(a) }}{% if not loop.last %}<br>{% endif %}{% else %}-{% endfor %}</td>
             <td>{{ i['tipo'] }}</td>
-            <td class="num">
+            <td class="num col-curta">
                 {{ i['quantidade'] }}
                 {% if i['quantidade'] == 0 %}<span class="selo selo-recusado">Acabou</span>
                 {% elif i['minimo'] > 0 and i['quantidade'] <= i['minimo'] %}<span class="selo selo-aguardando">Baixo</span>{% endif %}
             </td>
-            <td class="num">{{ i['minimo'] }}</td>
+            <td class="num col-curta">{{ i['minimo'] }}</td>
             {% if usuario and usuario['tipo'] == 'DONO' %}<td class="num">{{ formatar_dinheiro(i['custo_centavos']) }}</td>{% endif %}
             <td class="num">{{ formatar_dinheiro(i['preco_centavos']) }}</td>
             <td class="acoes-estoque">
