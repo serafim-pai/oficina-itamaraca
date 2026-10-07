@@ -61,7 +61,7 @@ CONDICOES_PADRAO = (
 TRAVADOS_APOS_ENTREGA = {"registrar_servico", "registrar_resolucao", "registrar_valor", "excluir_servico",
                          "registrar_aprovacao", "registrar_prazo", "registrar_garantia", "fechar_entrega",
                          "adicionar_fotos", "excluir_foto", "trocar_foto",
-                         "adicionar_fotos_problema", "excluir_foto_problema"}
+                         "adicionar_fotos_problema", "excluir_foto_problema", "registrar_etapa"}
 MAX_FOTOS = 10                       # fotos por envio (no cadastro ou ao adicionar depois)
 MAX_FOTOS_PROBLEMA = 5               # fotos de um mesmo problema/serviço
 MAX_FOTOS_VEICULO = 20               # fotos de um veículo, no total
@@ -277,6 +277,19 @@ def init_db():
             garantia_valor INTEGER NOT NULL,
             garantia_unidade TEXT NOT NULL,
             garantia_ate TEXT
+        )
+        """
+    )
+    # Etapas do serviço (aguardando início, em reparo, pronto para retirada): cada mudança fica guardada
+    # (quem e quando) e a última é a que vale. Sem nenhuma linha, o veículo está "aguardando início".
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS etapas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            veiculo_id INTEGER NOT NULL,
+            etapa TEXT NOT NULL,
+            registrado_por TEXT,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
         """
     )
@@ -662,6 +675,45 @@ def prazos_dos_veiculos(db, veiculos):
     return resultado
 
 
+# ---------- ETAPAS DO SERVIÇO ----------
+
+# Etapas na ordem em que acontecem. Sem registro, o veículo está na primeira.
+ETAPAS = {
+    "AGUARDANDO_INICIO": "Aguardando início",
+    "EM_REPARO": "Em reparo",
+    "PRONTO": "Pronto para retirada",
+}
+# De onde dá para ir para onde. Voltar uma etapa serve para corrigir um engano.
+MUDANCAS_DE_ETAPA = {
+    "AGUARDANDO_INICIO": ("EM_REPARO",),
+    "EM_REPARO": ("PRONTO", "AGUARDANDO_INICIO"),
+    "PRONTO": ("EM_REPARO",),
+}
+
+
+def etapa_atual(db, veiculo_id):
+    linha = db.execute("SELECT etapa FROM etapas WHERE veiculo_id = ? ORDER BY id DESC LIMIT 1",
+                       (veiculo_id,)).fetchone()
+    return linha["etapa"] if linha and linha["etapa"] in ETAPAS else "AGUARDANDO_INICIO"
+
+
+def etapas_dos_veiculos(db, veiculos):
+    """Etapa de cada veículo da lista, com poucas consultas. Veículo entregue aparece como 'Entregue'."""
+    ultimas = {}
+    for e in db.execute("SELECT veiculo_id, etapa FROM etapas ORDER BY id"):
+        ultimas[e["veiculo_id"]] = e["etapa"]               # a última linha de cada veículo é a que vale
+    entregues = {e["veiculo_id"] for e in db.execute("SELECT veiculo_id FROM entregas")}
+    resultado = {}
+    for v in veiculos:
+        if v["id"] in entregues:
+            resultado[v["id"]] = ("ETAPA_ENTREGUE", "Entregue")
+        else:
+            chave = ultimas.get(v["id"], "AGUARDANDO_INICIO")
+            chave = chave if chave in ETAPAS else "AGUARDANDO_INICIO"
+            resultado[v["id"]] = (f"ETAPA_{chave}", ETAPAS[chave])
+    return resultado
+
+
 # ---------- GARANTIA E ENTREGA (história 8) ----------
 
 def somar_meses(data, meses):
@@ -742,7 +794,8 @@ def pagina_inicial(erros=None, dados=None):
                            dados=dados or {}, cadastrado=cadastrado, excluido=excluido, max_fotos=MAX_FOTOS,
                            max_mb=MAX_BYTES_FOTO // (1024 * 1024),
                            situacoes=situacoes_dos_veiculos(db, veiculos),
-                           prazos=prazos_dos_veiculos(db, veiculos))
+                           prazos=prazos_dos_veiculos(db, veiculos),
+                           etapas=etapas_dos_veiculos(db, veiculos))
 
 
 @app.route("/")
@@ -1082,6 +1135,17 @@ def link_whatsapp(veiculo, servicos, total_centavos):
     return f"{base}?text={quote(texto)}"
 
 
+def link_whatsapp_pronto(veiculo):
+    """Link do WhatsApp com o aviso de que o veículo está pronto para retirada (a pessoa confere e envia)."""
+    nome = (veiculo["responsavel"] or "").strip()
+    carro = " ".join(p for p in (veiculo["marca"], veiculo["modelo"], veiculo["cor"]) if p)
+    texto = (f"Olá{', ' + nome if nome else ''}! Aqui é da Oficina Itamaracá.\n"
+             f"O seu veículo {carro + ' ' if carro else ''}placa {veiculo['placa']} está *pronto para retirada*.\n"
+             "Qualquer dúvida, é só responder esta mensagem. Obrigado!")
+    base = f"https://wa.me/55{veiculo['telefone']}" if veiculo["telefone"] else "https://wa.me/"
+    return f"{base}?text={quote(texto)}"
+
+
 @app.route("/veiculos", methods=["POST"])
 def cadastrar_veiculo():
     dados = {
@@ -1197,7 +1261,12 @@ def pagina_veiculo(id, erros=None, dados=None):
     sem_garantia_informada = sum(1 for s in servicos if s["garantia_valor"] is None)
     desfeitas = db.execute("SELECT * FROM entregas_desfeitas WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
     historico_fotos = db.execute("SELECT * FROM fotos_historico WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
-    return render_template("veiculo.html", veiculo=veiculo, servicos=servicos, fotos=fotos,
+    historico_etapas = db.execute("SELECT * FROM etapas WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
+    etapa = etapa_atual(db, id)
+    return render_template("veiculo.html", etapa=etapa, etapas=ETAPAS, historico_etapas=historico_etapas,
+                           proximas_etapas=MUDANCAS_DE_ETAPA[etapa],
+                           link_whatsapp_pronto=(link_whatsapp_pronto(veiculo)
+                                                 if etapa == "PRONTO" and not entrega else None), veiculo=veiculo, servicos=servicos, fotos=fotos,
                            fotos_entrega=fotos_entrega, fotos_desfeitas=fotos_desfeitas,
                            historico_fotos=historico_fotos, max_fotos=MAX_FOTOS, max_fotos_veiculo=MAX_FOTOS_VEICULO,
                            max_mb=MAX_BYTES_FOTO // (1024 * 1024),
@@ -1603,6 +1672,36 @@ def comprovante(id):
                            texto_garantia=texto_garantia, nomes_formas=NOMES_FORMAS_APROVACAO)
 
 
+@app.route("/veiculos/<int:id>/etapa", methods=["POST"])
+def registrar_etapa(id):
+    """Dono e funcionário mudam a etapa do serviço (aguardando início, em reparo, pronto para retirada).
+    Só dá para iniciar o reparo depois que o cliente aprovou o orçamento. Cada mudança fica guardada
+    (quem e quando) e a última é a que vale."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    servicos = db.execute("SELECT * FROM servicos WHERE veiculo_id = ? ORDER BY id", (id,)).fetchall()
+    ultima_aprovacao = db.execute("SELECT * FROM aprovacoes WHERE veiculo_id = ? ORDER BY id DESC LIMIT 1",
+                                  (id,)).fetchone()
+    atual = etapa_atual(db, id)
+    nova = request.form.get("etapa", "")
+
+    erros = []
+    if nova not in ETAPAS:
+        erros.append("Escolha a etapa.")
+    elif nova not in MUDANCAS_DE_ETAPA[atual]:
+        erros.append(f"O veículo está em \"{ETAPAS[atual]}\": não dá para ir direto para \"{ETAPAS[nova]}\".")
+    elif nova == "EM_REPARO" and atual == "AGUARDANDO_INICIO" \
+            and situacao_aprovacao(servicos, ultima_aprovacao)[0] != "APROVADO":
+        erros.append("O reparo só pode começar depois que o cliente aprovar o orçamento.")
+    if erros:
+        return pagina_veiculo(id, erros)
+
+    db.execute("INSERT INTO etapas (veiculo_id, etapa, registrado_por) VALUES (?, ?, ?)",
+               (id, nova, g.usuario["nome"]))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
 @app.route("/veiculos/<int:id>/telefone", methods=["POST"])
 def registrar_telefone(id):
     """Dono e funcionário informam ou corrigem o telefone (WhatsApp) do cliente. Pode ficar vazio."""
@@ -1647,7 +1746,7 @@ def excluir_veiculo(id):
         db.execute("INSERT INTO veiculos_excluidos (veiculo_id, placa, responsavel, motivo, excluido_por) "
                    "VALUES (?, ?, ?, ?, ?)",
                    (id, veiculo["placa"], veiculo["responsavel"], motivo, g.usuario["nome"]))
-        for tabela in ("fotos", "fotos_historico", "servicos", "aprovacoes", "prazos"):
+        for tabela in ("fotos", "fotos_historico", "servicos", "aprovacoes", "prazos", "etapas"):
             db.execute(f"DELETE FROM {tabela} WHERE veiculo_id = ?", (id,))
         db.execute("DELETE FROM veiculos WHERE id = ?", (id,))
         db.commit()

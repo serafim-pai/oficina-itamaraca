@@ -223,3 +223,11 @@ a.botao.botao-whatsapp { background: #1e8e4f; color: #fff; }
 a.botao.botao-whatsapp:hover { background: #17703e; }
 td.problema .galeria-problema { margin-top: 8px; }
 td.problema details.fotos-problema { margin-top: 8px; font-size: 13px; }
+.selo-etapa-aguardando-inicio { background: #e5e5e5; color: #555; }
+.selo-etapa-em-reparo { background: #fff3cd; color: #856404; }
+.selo-etapa-pronto { background: #d4edda; color: #155724; }
+.selo-etapa-entregue { background: #cfe2ff; color: #0a3d91; }
+.botoes-etapa { display: flex; flex-wrap: wrap; gap: 8px; }
+.botoes-etapa button { width: auto; }
+.botoes-etapa button.secundario { background: #6b7280; }
+.botoes-etapa button:disabled { opacity: .5; cursor: not-allowed; }

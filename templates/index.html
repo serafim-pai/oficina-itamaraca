@@ -82,6 +82,7 @@
             <th>Placa</th>
             <th>Fotos</th>
             <th>Orçamento</th>
+            <th>Etapa</th>
             <th>Entrega</th>
             <th>Marca</th>
             <th>Modelo</th>
@@ -103,6 +104,8 @@
             </td>
             {% set sit = situacoes[v['id']] %}
             <td><span class="selo selo-{{ sit[0]|lower|replace('_', '-') }}">{{ sit[1] }}</span></td>
+            {% set et = etapas[v['id']] %}
+            <td><span class="selo selo-{{ et[0]|lower|replace('_', '-') }}">{{ et[1] }}</span></td>
             {% set pz = prazos[v['id']] %}
             <td><span class="selo selo-{{ pz[0]|lower|replace('_', '-') }}">{{ pz[1] }}</span></td>
             <td>{{ v['marca'] }}</td>

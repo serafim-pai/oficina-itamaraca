@@ -321,6 +321,47 @@
         {% endif %}
     </div>
 
+    <div class="etapa">
+        <h2>Etapa do serviço</h2>
+        <p><span class="selo selo-etapa-{{ etapa|lower|replace('_', '-') }}">{{ etapas[etapa] }}</span></p>
+        {% if entrega %}
+        <p class="aviso">O veículo já foi entregue.</p>
+        {% else %}
+        {% if etapa == 'AGUARDANDO_INICIO' and not aprovado_vigente %}
+        <p class="aviso">O reparo só pode começar depois que o cliente aprovar o orçamento.</p>
+        {% endif %}
+        <form method="POST" action="{{ url_for('registrar_etapa', id=veiculo['id']) }}" class="botoes-etapa">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% for proxima in proximas_etapas %}
+            <button type="submit" name="etapa" value="{{ proxima }}"
+                    {% if proxima == 'EM_REPARO' and etapa == 'AGUARDANDO_INICIO' and not aprovado_vigente %}disabled{% endif %}
+                    {% if proxima in ('AGUARDANDO_INICIO',) or (proxima == 'EM_REPARO' and etapa == 'PRONTO') %}class="secundario"{% endif %}>
+                {% if proxima == 'EM_REPARO' and etapa == 'AGUARDANDO_INICIO' %}Iniciar o reparo
+                {% elif proxima == 'PRONTO' %}Marcar como pronto para retirada
+                {% else %}Voltar para "{{ etapas[proxima] }}"{% endif %}
+            </button>
+            {% endfor %}
+        </form>
+        {% if link_whatsapp_pronto %}
+        <p><a class="botao botao-whatsapp" href="{{ link_whatsapp_pronto }}" target="_blank" rel="noopener">📲 Avisar o cliente pelo WhatsApp</a></p>
+        <p class="aviso">Abre o WhatsApp com o aviso de "pronto para retirada" já escrito; você confere e toca em enviar.</p>
+        {% endif %}
+        {% endif %}
+        {% if historico_etapas %}
+        <details class="historico-etapas">
+            <summary>Histórico das etapas ({{ historico_etapas|length }})</summary>
+            <div class="tabela-rolavel">
+            <table>
+                <tr><th>Quando</th><th>Etapa</th><th>Por</th></tr>
+                {% for h in historico_etapas %}
+                <tr><td>{{ h['criado_em']|hora_brasil }}</td><td>{{ etapas.get(h['etapa'], h['etapa']) }}</td><td>{{ h['registrado_por'] }}</td></tr>
+                {% endfor %}
+            </table>
+            </div>
+        </details>
+        {% endif %}
+    </div>
+
     <div class="prazo">
         <h2>Prazo de entrega</h2>
         <p><span class="selo selo-{{ prazo_chave|lower|replace('_', '-') }}">{{ prazo_texto }}</span></p>
