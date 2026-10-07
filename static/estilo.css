@@ -247,3 +247,4 @@ td.referencia-peca details { margin-top: 6px; font-size: 13px; }
 td.referencia-peca p { margin: 0 0 6px; }
 .botoes-busca { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .botoes-busca button { width: 100%; margin-top: 0; }
+td.problema details.editar-problema { margin-top: 8px; font-size: 13px; }

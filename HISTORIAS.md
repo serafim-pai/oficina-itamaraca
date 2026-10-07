@@ -238,3 +238,10 @@ está no estoque se pesquisa e se compra na autopeça.
   informado no cadastro ou depois. Com chassi cadastrado, a pesquisa de peça ganha a opção "Pelo chassi
   (Google)" e a tela mostra o chassi para a pessoa dizer no balcão da autopeça, o que diminui o risco de
   comprar a peça de outra versão do mesmo carro.
+
+Editar um problema registrado:
+- Dono e funcionário corrigem o tipo e a descrição de um problema ("✏️ Editar problema"), até a entrega.
+  Fotos, "como resolver", valor, garantia, peças e quem registrou não mudam.
+- Corrigir o texto não muda o orçamento: a aprovação do cliente continua valendo.
+- Se o tipo mudar, vale o limite de garantia do novo tipo: se a garantia já informada passar dele, nada é
+  salvo e o sistema pede para o dono corrigir a garantia primeiro.

@@ -63,7 +63,8 @@ TRAVADOS_APOS_ENTREGA = {"registrar_servico", "registrar_resolucao", "registrar_
                          "registrar_aprovacao", "registrar_prazo", "registrar_garantia", "fechar_entrega",
                          "adicionar_fotos", "excluir_foto", "trocar_foto",
                          "adicionar_fotos_problema", "excluir_foto_problema", "registrar_etapa",
-                         "usar_peca", "devolver_peca", "registrar_referencia", "registrar_dados_veiculo"}
+                         "usar_peca", "devolver_peca", "registrar_referencia", "registrar_dados_veiculo",
+                         "editar_problema"}
 MAX_DADO_VEICULO = 40                # letras de marca, modelo, cor e quilometragem do veículo
 MAX_PECA_BUSCA = 100                 # letras do nome da peça pesquisada na Web
 MAX_REFERENCIA = 300                 # letras da anotação "número original / onde comprar"
@@ -1468,6 +1469,40 @@ def registrar_servico(id):
 
     db.execute("INSERT INTO servicos (veiculo_id, tipo, problema, registrado_por) VALUES (?, ?, ?, ?)",
                (id, tipo, problema, g.usuario["nome"]))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/problema", methods=["POST"])
+def editar_problema(id, servico_id):
+    """Corrige o tipo e a descrição de um problema registrado, sem perder fotos, valor, garantia nem peças.
+    Dono e funcionário podem, até a entrega. O orçamento e a aprovação do cliente não mudam (só o texto muda).
+    Mudar o tipo muda o limite de garantia: se a garantia já informada passar do limite do novo tipo, nada é salvo."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    servico = db.execute("SELECT * FROM servicos WHERE id = ? AND veiculo_id = ?", (servico_id, id)).fetchone()
+    if not servico:
+        abort(404)
+    tipo = request.form.get("tipo", "").strip().upper()
+    problema = " ".join(request.form.get("problema", "").split())
+
+    erros = []
+    if tipo not in TIPOS_SERVICO:
+        erros.append("Escolha o tipo de serviço.")
+    if sum(1 for letra in problema if letra.isalpha()) < 3:
+        erros.append("Descreva o problema encontrado no veículo.")
+    elif len(problema) > MAX_PROBLEMA:
+        erros.append(f"A descrição do problema pode ter no máximo {MAX_PROBLEMA} letras.")
+    if tipo in TIPOS_SERVICO and tipo != servico["tipo"] and servico["garantia_valor"]:
+        limite_meses = limites_de_garantia(db).get(tipo, MAX_LIMITE_MESES)
+        if servico["garantia_valor"] > limite_em(servico["garantia_unidade"], limite_meses):
+            erros.append(f"A garantia deste serviço ({texto_garantia(servico['garantia_valor'], servico['garantia_unidade'])}) "
+                         f"passa do limite de {tipo}, que é {texto_limite(limite_meses)}. "
+                         "Peça ao dono para corrigir a garantia antes de mudar o tipo.")
+    if erros:
+        return pagina_veiculo(id, erros)
+
+    db.execute("UPDATE servicos SET tipo = ?, problema = ? WHERE id = ?", (tipo, problema, servico_id))
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
 

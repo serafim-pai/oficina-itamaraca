@@ -165,6 +165,21 @@
             <td>{{ s['tipo'] }}</td>
             <td class="problema">
                 {{ s['problema'] }}
+                {% if not entrega %}
+                <details class="editar-problema">
+                    <summary>✏️ Editar problema</summary>
+                    <form method="POST" action="{{ url_for('editar_problema', id=veiculo['id'], servico_id=s['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <label for="tipo_{{ s['id'] }}">Tipo de serviço</label>
+                        <select id="tipo_{{ s['id'] }}" name="tipo">
+                            {% for t in tipos %}<option value="{{ t }}" {{ 'selected' if t == s['tipo'] }}>{{ t }}</option>{% endfor %}
+                        </select>
+                        <label for="problema_{{ s['id'] }}">Problema encontrado</label>
+                        <textarea id="problema_{{ s['id'] }}" name="problema" rows="3" maxlength="{{ max_problema }}">{{ s['problema'] }}</textarea>
+                        <button type="submit">Salvar</button>
+                    </form>
+                </details>
+                {% endif %}
                 {% set fotos_do_problema = fotos_problemas.get(s['id'], []) %}
                 {% if fotos_do_problema %}
                 <div class="galeria galeria-problema">
