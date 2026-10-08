@@ -52,11 +52,14 @@ class AvisoDeCadastroTest(BaseTest):
         func = self.funcionario()
         r = func.post("/veiculos", data={"placa": "ABC1D23", "documento_deixado": "on"})
         self.assertEqual(r.status_code, 302)
-        pagina = func.get(r.headers["Location"]).data.decode()
         vid = self.sql("SELECT id FROM veiculos")[0]["id"]
+        # cadastro "corrido": vai direto para a ficha do veículo, no ponto de registrar o problema
+        self.assertIn(f"/veiculos/{vid}?cadastrado=1#registrar-problema", r.headers["Location"])
+        pagina = func.get(r.headers["Location"]).data.decode()
         self.assertIn("cadastrado com sucesso", pagina)
         self.assertIn("ABC1D23", pagina)
-        self.assertIn(f"/veiculos/{vid}", pagina)
+        self.assertIn('id="registrar-problema"', pagina)
+        self.assertNotIn("cadastrado com sucesso", func.get(f"/veiculos/{vid}").data.decode())
 
     def test_sem_cadastro_novo_nao_mostra_aviso_e_id_invalido_e_ignorado(self):
         func = self.funcionario()

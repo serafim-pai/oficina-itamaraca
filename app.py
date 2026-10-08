@@ -1366,7 +1366,8 @@ def cadastrar_veiculo():
             if os.path.exists(caminho):
                 os.remove(caminho)
         raise
-    return redirect(url_for("index", cadastrado=cursor.lastrowid) + "#cadastrado")
+    # segue direto para a ficha do veículo, no ponto de registrar o problema (cadastro "corrido", como numa folha)
+    return redirect(url_for("ver_veiculo", id=cursor.lastrowid, cadastrado=1) + "#registrar-problema")
 
 
 # ---------- PROBLEMAS E TIPOS DE SERVIÇO (por veículo) ----------
@@ -1391,7 +1392,7 @@ def buscar_veiculo(db, id):
     return veiculo
 
 
-def pagina_veiculo(id, erros=None, dados=None):
+def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False):
     db = get_db()
     veiculo = buscar_veiculo(db, id)
     servicos = db.execute("SELECT * FROM servicos WHERE veiculo_id = ? ORDER BY id", (id,)).fetchall()
@@ -1458,7 +1459,7 @@ def pagina_veiculo(id, erros=None, dados=None):
                            maximo_iso=(hoje + timedelta(days=MAX_DIAS_PRAZO)).isoformat(),
                            formatar_data=formatar_data, max_motivo=MAX_MOTIVO_PRAZO,
                            tipos=TIPOS_SERVICO, max_problema=MAX_PROBLEMA,
-                           erros=erros or [], dados=dados or {},
+                           erros=erros or [], dados=dados or {}, recem_cadastrado=recem_cadastrado,
                            total_centavos=total_centavos, faltam_valor=faltam,
                            orcamento_completo=orcamento_completo, formatar_dinheiro=formatar_dinheiro,
                            aprovacoes=aprovacoes, situacao=situacao, situacao_texto=situacao_texto,
@@ -1469,7 +1470,7 @@ def pagina_veiculo(id, erros=None, dados=None):
 
 @app.route("/veiculos/<int:id>")
 def ver_veiculo(id):
-    return pagina_veiculo(id)
+    return pagina_veiculo(id, recem_cadastrado=bool(request.args.get("cadastrado")))
 
 
 @app.route("/veiculos/<int:id>/servicos", methods=["POST"])

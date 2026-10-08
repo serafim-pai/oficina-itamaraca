@@ -10,6 +10,9 @@
     {% include '_menu.html' %}
     <h1>{{ veiculo['placa'] }}</h1>
     <p><a href="{{ url_for('index') }}">&larr; Voltar aos veículos</a></p>
+    {% if recem_cadastrado %}
+    <div class="ok">&#10003; Veículo <strong>{{ veiculo['placa'] }}</strong> cadastrado com sucesso. Continue abaixo: registre o problema e o tipo de serviço.</div>
+    {% endif %}
     <p>Orçamento: <span class="selo selo-{{ situacao|lower|replace('_', '-') }}">{{ situacao_texto }}</span>
        &nbsp; Entrega: <span class="selo selo-{{ prazo_chave|lower|replace('_', '-') }}">{{ prazo_texto }}</span></p>
 
@@ -134,7 +137,7 @@
     {% endif %}
 
     {% if not entrega %}
-    <h2>Registrar problema e tipo de serviço</h2>
+    <h2 id="registrar-problema">Registrar problema e tipo de serviço</h2>
     <form method="POST" action="{{ url_for('registrar_servico', id=veiculo['id']) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="tipo">Tipo de serviço *</label>
