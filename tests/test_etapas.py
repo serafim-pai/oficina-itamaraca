@@ -27,6 +27,7 @@ class EtapasBase(BaseTest):
         assinatura = re.search(r'name="assinatura" value="([^"]+)"', pagina).group(1)
         self.func.post(f"/veiculos/{self.vid}/aprovacao", data={
             "decisao": "APROVADO", "forma": "PESSOALMENTE", "observacao": "", "assinatura": assinatura})
+        self.definir_prazo(self.vid)
 
     def mudar(self, etapa, cliente=None):
         return (cliente or self.func).post(f"/veiculos/{self.vid}/etapa", data={"etapa": etapa})

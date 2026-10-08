@@ -17,6 +17,8 @@ class PecaOrigemTest(AprovacaoBase):
                                            data={"em_maos": "1" if marcar else "0"})
 
     def etapa(self, nova, cliente=None):
+        if not self.sql("SELECT 1 FROM prazos"):
+            self.definir_prazo(self.vid)
         return (cliente or self.func).post(f"/veiculos/{self.vid}/etapa", data={"etapa": nova})
 
     def servico(self, sid=None):
@@ -98,3 +100,17 @@ class TotalAprovadoComPecasTest(AprovacaoBase):
         self.decidir("APROVADO")
         total = self.sql("SELECT total_centavos FROM aprovacoes")[0]["total_centavos"]
         self.assertEqual(total, 15000 + 25050 + 9000)
+
+
+class PrazoAntesDoReparoTest(AprovacaoBase):
+    def test_reparo_nao_comeca_sem_prazo_de_entrega(self):
+        self.decidir("APROVADO")
+        r = self.func.post(f"/veiculos/{self.vid}/etapa", data={"etapa": "EM_REPARO"})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("com o prazo de entrega definido", r.data.decode())
+        self.definir_prazo(self.vid)
+        self.assertEqual(self.func.post(f"/veiculos/{self.vid}/etapa", data={"etapa": "EM_REPARO"}).status_code, 302)
+
+    def test_prazo_aparece_antes_da_etapa_na_tela(self):
+        pagina = self.func.get(f"/veiculos/{self.vid}").data.decode()
+        self.assertLess(pagina.index("Prazo de entrega</h2>"), pagina.index("Etapa do serviço</h2>"))

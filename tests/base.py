@@ -52,6 +52,11 @@ class BaseTest(unittest.TestCase):
             banco.commit()
             return linhas
 
+    def definir_prazo(self, veiculo_id):
+        """Prazo de entrega direto no banco: o reparo só começa com o prazo definido."""
+        self.sql("INSERT INTO prazos (veiculo_id, data_prevista, registrado_por) VALUES (?, '2099-01-01', 'TESTE')",
+                 (veiculo_id,))
+
     def criar_usuario(self, email, tipo="FUNCIONARIO", ativo=1, nome="PESSOA TESTE"):
         with closing(sqlite3.connect(oficina.DATABASE)) as banco:
             novo_id = banco.execute(

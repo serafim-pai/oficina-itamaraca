@@ -10,6 +10,7 @@ from base import foto_de_entrega
 class ExigirProntoTest(test_entrega.EntregaBase):
     def setUp(self):
         super().setUp()
+        self.definir_prazo(self.vid)
         self.garantias_ok()
 
     def fechar_sem_marcar(self):

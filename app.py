@@ -2042,6 +2042,9 @@ def registrar_etapa(id):
     elif nova == "EM_REPARO" and atual == "AGUARDANDO_INICIO" \
             and situacao_aprovacao(servicos, ultima_aprovacao)[0] != "APROVADO":
         erros.append("O reparo só pode começar depois que o cliente aprovar o orçamento.")
+    elif nova == "EM_REPARO" and atual == "AGUARDANDO_INICIO"             and not db.execute("SELECT 1 FROM prazos WHERE veiculo_id = ?", (id,)).fetchone():
+        erros.append("O reparo só pode começar com o prazo de entrega definido. O dono define o prazo em "
+                     "\"Prazo de entrega\", acima da etapa.")
     elif nova == "EM_REPARO" and atual == "AGUARDANDO_INICIO" and pecas_pendentes(servicos):
         erros.append("O reparo só pode começar com a peça em mãos. Falta a peça de: "
                      + ", ".join(s["tipo"] for s in pecas_pendentes(servicos))
