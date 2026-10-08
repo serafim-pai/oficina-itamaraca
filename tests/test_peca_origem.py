@@ -148,3 +148,21 @@ class EtapaEntregueECorretorTest(EntregaBase):
         self.assertNotIn(">Pronto para retirada</span>", trecho[:300])
         self.assertIn("corretor.js", ficha)
         self.assertEqual(self.dono_c.get("/static/corretor.js").status_code, 200)
+
+
+class MateriaisInclusosTest(EntregaBase):
+    def test_servico_sem_peca_diz_que_os_materiais_estao_inclusos(self):
+        ficha = self.dono_c.get(f"/veiculos/{self.vid}").data.decode()
+        self.assertIn("Materiais inclusos no valor do serviço", ficha)
+        self.assertIn("peca.js", ficha)
+        self.assertIn("(materiais inclusos)", self.link_whatsapp_orcamento(ficha))
+        self.garantias_ok()
+        self.fechar()
+        comprovante = self.dono_c.get(f"/veiculos/{self.vid}/comprovante").data.decode()
+        self.assertIn("Materiais inclusos no valor do serviço", comprovante)
+
+    def link_whatsapp_orcamento(self, ficha):
+        import html
+        from urllib.parse import unquote
+        links = [html.unescape(t.split('"')[0]) for t in ficha.split('href="') if t.startswith("https://wa.me/")]
+        return unquote(links[0]) if links else ""

@@ -36,6 +36,8 @@
                 <td>{{ i['como_resolver'] or '-' }}
                     {% for p in pecas_entrega.get(i['id'], []) %}
                     <br><small>{{ p['quantidade'] }}x {{ p['nome'] }} ({{ formatar_dinheiro(p['quantidade'] * p['preco_centavos']) }})</small>
+                    {% else %}
+                    <br><small>Materiais inclusos no valor do serviço</small>
                     {% endfor %}
                 </td>
                 <td class="num">{{ formatar_dinheiro(i['valor_centavos'] + i['pecas_centavos']) }}

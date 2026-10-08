@@ -1278,7 +1278,8 @@ def link_whatsapp(veiculo, servicos, total_centavos):
     fim = (f"\n*Total: {formatar_dinheiro(total_centavos)}*\n\n"
            "Você aprova o orçamento? Responda *APROVADO* ou *RECUSADO*.")
     linhas = [f"• {s['tipo'].capitalize()}: {' '.join(s['problema'].split())[:100]} - "
-              f"{formatar_dinheiro(s['valor_centavos'] + s['pecas_centavos'])}" for s in servicos]
+              f"{formatar_dinheiro(s['valor_centavos'] + s['pecas_centavos'])}"
+              + ("" if s["pecas_centavos"] else " (materiais inclusos)") for s in servicos]
     incluidas = list(linhas)
     while True:
         mais = len(linhas) - len(incluidas)
