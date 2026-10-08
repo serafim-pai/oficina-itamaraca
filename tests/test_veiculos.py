@@ -75,3 +75,17 @@ class PaginaCorridaTest(BaseTest):
         for caminho in (f"/veiculos/{vid}", "/estoque"):
             self.assertIn("continuo.js", func.get(caminho).data.decode())
         self.assertEqual(func.get("/static/continuo.js").status_code, 200)
+
+
+class FormularioDeProblemaTest(BaseTest):
+    def test_formulario_fica_aberto_sem_problema_e_recolhido_depois_do_primeiro(self):
+        func = self.funcionario()
+        func.post("/veiculos", data={"placa": "ABC1D23", "documento_deixado": "on"})
+        vid = self.sql("SELECT id FROM veiculos")[0]["id"]
+        pagina = func.get(f"/veiculos/{vid}").data.decode()
+        self.assertIn("<h2 id=\"registrar-problema\">", pagina)
+        self.assertNotIn("Registrar outro problema", pagina)
+        func.post(f"/veiculos/{vid}/servicos", data={"tipo": "FREIOS", "problema": "pastilha gasta"})
+        pagina = func.get(f"/veiculos/{vid}").data.decode()
+        self.assertIn("Registrar outro problema", pagina)
+        self.assertIn('action="/veiculos/%d/servicos"' % vid, pagina)

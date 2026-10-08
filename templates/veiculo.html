@@ -137,7 +137,13 @@
     {% endif %}
 
     {% if not entrega %}
+    {% set recolher_form = servicos and not erros %}
+    {% if recolher_form %}
+    <details id="registrar-problema" class="telefone-cliente">
+        <summary>➕ Registrar outro problema</summary>
+    {% else %}
     <h2 id="registrar-problema">Registrar problema e tipo de serviço</h2>
+    {% endif %}
     <form method="POST" action="{{ url_for('registrar_servico', id=veiculo['id']) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="tipo">Tipo de serviço *</label>
@@ -153,6 +159,7 @@
 
         <button type="submit">Registrar</button>
     </form>
+    {% if recolher_form %}</details>{% endif %}
     {% endif %}
 
     <h2>Problemas registrados</h2>
