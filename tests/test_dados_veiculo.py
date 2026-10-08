@@ -28,9 +28,9 @@ class DadosDoVeiculoTest(BaseTest):
         self.assertEqual(self.salvar().status_code, 302)
         v = self.veiculo()
         self.assertEqual((v["marca"], v["modelo"], v["cor"], v["ano"], v["quilometragem"]),
-                         ("Fiat", "Uno Mille", "Vermelho", "2012", "150000"))
+                         ("FIAT", "UNO MILLE", "VERMELHO", "2012", "150000"))
         self.assertEqual(self.salvar(cliente=self.dono_c, cor="Preto").status_code, 302)
-        self.assertEqual(self.veiculo()["cor"], "Preto")
+        self.assertEqual(self.veiculo()["cor"], "PRETO")
 
     def test_placa_e_responsavel_nao_mudam(self):
         self.func.post(f"/veiculos/{self.vid}/dados", data=dict(NOVOS, placa="ZZZ9Z99", responsavel="OUTRO"))
@@ -43,7 +43,7 @@ class DadosDoVeiculoTest(BaseTest):
         self.salvar()
         r = self.func.get(url, query_string={"peca": "filtro de oleo", "site": "GOOGLE"})
         self.assertEqual(r.status_code, 302)
-        self.assertIn("Uno+Mille", r.headers["Location"])
+        self.assertIn("UNO+MILLE", r.headers["Location"])
 
     def test_formulario_abre_sozinho_quando_falta_marca_ou_modelo(self):
         pagina = self.func.get(f"/veiculos/{self.vid}").data.decode()
@@ -52,7 +52,7 @@ class DadosDoVeiculoTest(BaseTest):
         self.salvar()
         pagina = self.func.get(f"/veiculos/{self.vid}").data.decode()
         self.assertNotIn("Informe a marca e o modelo", pagina)
-        self.assertIn('value="Uno Mille"', pagina)
+        self.assertIn('value="UNO MILLE"', pagina)
 
     def test_ano_invalido_nao_salva_nada(self):
         for ruim in ("abc", "12", "1800", "2300", "20122012123"):
@@ -67,7 +67,7 @@ class DadosDoVeiculoTest(BaseTest):
 
     def test_campos_vazios_apagam_e_espacos_sao_limpos(self):
         self.salvar(marca="  Fiat   ", modelo="Uno   Mille")
-        self.assertEqual((self.veiculo()["marca"], self.veiculo()["modelo"]), ("Fiat", "Uno Mille"))
+        self.assertEqual((self.veiculo()["marca"], self.veiculo()["modelo"]), ("FIAT", "UNO MILLE"))
         self.salvar(marca="", modelo="", ano="")
         self.assertEqual((self.veiculo()["marca"], self.veiculo()["modelo"], self.veiculo()["ano"]), ("", "", ""))
 

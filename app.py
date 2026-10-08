@@ -1306,11 +1306,11 @@ def link_whatsapp_pronto(veiculo):
 @app.route("/veiculos", methods=["POST"])
 def cadastrar_veiculo():
     dados = {
-        "responsavel": request.form.get("responsavel", "").strip(),
-        "placa": request.form.get("placa", "").strip(),
-        "marca": request.form.get("marca", "").strip(),
-        "modelo": request.form.get("modelo", "").strip(),
-        "cor": request.form.get("cor", "").strip(),
+        "responsavel": " ".join(request.form.get("responsavel", "").split()).upper(),
+        "placa": " ".join(request.form.get("placa", "").split()).upper(),
+        "marca": " ".join(request.form.get("marca", "").split()).upper(),
+        "modelo": " ".join(request.form.get("modelo", "").split()).upper(),
+        "cor": " ".join(request.form.get("cor", "").split()).upper(),
         "ano": request.form.get("ano", "").strip(),
         "quilometragem": request.form.get("quilometragem", "").strip(),
         "motor": " ".join(request.form.get("motor", "").split()),
@@ -2081,6 +2081,8 @@ def registrar_dados_veiculo(id):
     db = get_db()
     buscar_veiculo(db, id)
     dados = {c: " ".join(request.form.get(c, "").split()) for c in ("marca", "modelo", "cor", "ano", "quilometragem", "motor")}
+    for c in ("marca", "modelo", "cor"):           # padrão do sistema: tudo em maiúsculas
+        dados[c] = dados[c].upper()
     chassi, erro_chassi = interpretar_chassi(request.form.get("chassi", ""))
     erros = [erro_chassi] if erro_chassi else []
     for campo, rotulo in (("marca", "A marca"), ("modelo", "O modelo"), ("cor", "A cor"),

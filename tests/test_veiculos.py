@@ -103,3 +103,16 @@ class RascunhoTest(BaseTest):
         self.assertIn('data-rascunho="problema"', pagina)
         self.assertIn("rascunho.js", pagina)
         self.assertEqual(func.get("/static/rascunho.js").status_code, 200)
+
+
+class MaiusculasTest(BaseTest):
+    def test_cadastro_e_correcao_guardam_em_maiusculas(self):
+        func = self.funcionario()
+        func.post("/veiculos", data={"placa": " kjh3sw ", "responsavel": "flávio  bolsonaro", "marca": "gm",
+                                     "modelo": "vectra", "cor": "verde", "documento_deixado": "on"})
+        v = self.sql("SELECT * FROM veiculos")[0]
+        self.assertEqual((v["placa"], v["responsavel"], v["marca"], v["modelo"], v["cor"]),
+                         ("KJH3SW", "FLÁVIO BOLSONARO", "GM", "VECTRA", "VERDE"))
+        func.post(f"/veiculos/{v['id']}/dados", data={"marca": "fiat", "modelo": "uno", "cor": "azul claro"})
+        v = self.sql("SELECT * FROM veiculos")[0]
+        self.assertEqual((v["marca"], v["modelo"], v["cor"]), ("FIAT", "UNO", "AZUL CLARO"))
