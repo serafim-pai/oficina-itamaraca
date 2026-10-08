@@ -278,3 +278,13 @@ Os itens do estoque também aparecem como **cartões** (nome em destaque, depois
 preço e os carros em que serve), com espaço para os formulários de Entrada, Ajustar e Editar, que antes ficavam
 espremidos numa coluna estreita.
 
+
+
+Motor do veículo (cilindrada e potência):
+- O cadastro do veículo tem o campo "Motor" (exemplo: 1.8 8v 99cv, até 40 letras), que também pode ser
+  completado ou corrigido depois, em "Corrigir marca, modelo, cor, ano, km, motor e chassi do veículo", até a
+  entrega. Não é obrigatório, porque às vezes o cliente não sabe na hora.
+- Enquanto o motor não estiver informado, a página do veículo mostra um aviso (o mesmo modelo usa peças
+  diferentes conforme o motor) e abre o formulário de correção; a caixa de pesquisa de peça também avisa.
+- O motor entra na pesquisa da peça na Web (marca, modelo, motor e ano) e na busca da lista de veículos.
+

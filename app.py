@@ -467,6 +467,9 @@ def init_db():
     # Chassi do veículo (opcional): ajuda a achar a peça certa, que muda conforme a versão do carro
     if "chassi" not in colunas_veiculos:
         db.execute("ALTER TABLE veiculos ADD COLUMN chassi TEXT")
+    # Motor do veículo (cilindrada e potência, como "1.8 8v 99cv"): a peça certa muda conforme o motor
+    if "motor" not in colunas_veiculos:
+        db.execute("ALTER TABLE veiculos ADD COLUMN motor TEXT")
     # Fotos da entrega: "momento" diz quando a foto foi tirada. ENTRADA (as que já existiam), ENTREGA, ou
     # ENTREGA_DESFEITA (as da entrega que depois foi desfeita; ficam guardadas, ligadas a ela).
     colunas_fotos = [c[1] for c in db.execute("PRAGMA table_info(fotos)")]
@@ -903,7 +906,7 @@ def veiculo_combina_com_busca(veiculo, busca):
     """Busca na lista de veículos: cada palavra digitada precisa aparecer em algum destes dados do veículo:
     placa, responsável, marca, modelo, cor, ano, chassi ou telefone. Não importa maiúscula, acento, hífen
     nem espaço (ABC-1D23 acha ABC1D23; "joao" acha JOÃO)."""
-    campos = ("placa", "responsavel", "marca", "modelo", "cor", "ano", "chassi", "telefone")
+    campos = ("placa", "responsavel", "marca", "modelo", "cor", "ano", "motor", "chassi", "telefone")
     texto = "|".join(normalizar(veiculo[c]) for c in campos)
     palavras = [normalizar(p) for p in busca.split()]
     return all(p in texto for p in palavras if p)
@@ -1292,6 +1295,7 @@ def cadastrar_veiculo():
         "cor": request.form.get("cor", "").strip(),
         "ano": request.form.get("ano", "").strip(),
         "quilometragem": request.form.get("quilometragem", "").strip(),
+        "motor": " ".join(request.form.get("motor", "").split()),
     }
     dados["chassi"], erro_chassi = interpretar_chassi(request.form.get("chassi", ""))
     telefone, erro_telefone = normalizar_telefone(request.form.get("telefone", ""))
@@ -1303,6 +1307,8 @@ def cadastrar_veiculo():
         erros.append(erro_telefone)
     if erro_chassi:
         erros.append(erro_chassi)
+    if len(dados["motor"]) > MAX_DADO_VEICULO:
+        erros.append(f"O motor pode ter no máximo {MAX_DADO_VEICULO} letras (exemplo: 1.8 8v 99cv).")
     if not dados["placa"]:
         erros.append("A placa é obrigatória.")
     if not documento_deixado:
@@ -1335,8 +1341,8 @@ def cadastrar_veiculo():
         cursor = db.execute(
             """
             INSERT INTO veiculos
-                (responsavel, placa, marca, modelo, cor, ano, quilometragem, documento_deixado, telefone, chassi)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (responsavel, placa, marca, modelo, cor, ano, quilometragem, documento_deixado, telefone, chassi, motor)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 dados["responsavel"],
@@ -1349,6 +1355,7 @@ def cadastrar_veiculo():
                 1,
                 telefone,
                 dados["chassi"] or None,
+                dados["motor"] or None,
             ),
         )
         guardar_fotos(db, cursor.lastrowid, preparadas, criados)
@@ -1569,7 +1576,8 @@ def buscar_peca_na_web(id):
         erros.append("Cadastre o chassi do veículo para pesquisar a peça pelo chassi.")
     if erros:
         return pagina_veiculo(id, erros)
-    carro = " ".join(p for p in (veiculo["marca"], veiculo["modelo"], veiculo["ano"]) if p and p.strip())
+    carro = " ".join(p for p in (veiculo["marca"], veiculo["modelo"], veiculo["motor"], veiculo["ano"])
+                     if p and p.strip())
     texto = f"{peca} {carro}"
     if site == "GOOGLE":
         texto += " número original OEM código"
@@ -1977,11 +1985,11 @@ def registrar_dados_veiculo(id):
     Depois da entrega o cadastro fica travado. Se algum campo estiver inválido, nada é salvo."""
     db = get_db()
     buscar_veiculo(db, id)
-    dados = {c: " ".join(request.form.get(c, "").split()) for c in ("marca", "modelo", "cor", "ano", "quilometragem")}
+    dados = {c: " ".join(request.form.get(c, "").split()) for c in ("marca", "modelo", "cor", "ano", "quilometragem", "motor")}
     chassi, erro_chassi = interpretar_chassi(request.form.get("chassi", ""))
     erros = [erro_chassi] if erro_chassi else []
     for campo, rotulo in (("marca", "A marca"), ("modelo", "O modelo"), ("cor", "A cor"),
-                          ("quilometragem", "A quilometragem")):
+                          ("quilometragem", "A quilometragem"), ("motor", "O motor")):
         if len(dados[campo]) > MAX_DADO_VEICULO:
             erros.append(f"{rotulo} pode ter no máximo {MAX_DADO_VEICULO} letras.")
     if dados["ano"]:
@@ -1990,8 +1998,10 @@ def registrar_dados_veiculo(id):
             erros.append("O ano deve ter 4 números, entre 1900 e 2100 (exemplo: 2012 ou 2012/2013).")
     if erros:
         return pagina_veiculo(id, erros)
-    db.execute("UPDATE veiculos SET marca = ?, modelo = ?, cor = ?, ano = ?, quilometragem = ?, chassi = ? WHERE id = ?",
-               (dados["marca"], dados["modelo"], dados["cor"], dados["ano"], dados["quilometragem"], chassi or None, id))
+    db.execute("UPDATE veiculos SET marca = ?, modelo = ?, cor = ?, ano = ?, quilometragem = ?, chassi = ?, motor = ? "
+               "WHERE id = ?",
+               (dados["marca"], dados["modelo"], dados["cor"], dados["ano"], dados["quilometragem"], chassi or None,
+                dados["motor"] or None, id))
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
 

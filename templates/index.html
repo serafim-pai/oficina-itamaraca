@@ -52,6 +52,9 @@
         <label for="ano">Ano</label>
         <input type="text" id="ano" name="ano" value="{{ dados.get('ano', '') }}">
 
+        <label for="motor">Motor: cilindrada e potência (exemplo: 1.8 8v 99cv)</label>
+        <input type="text" id="motor" name="motor" maxlength="40" value="{{ dados.get('motor', '') }}">
+        <span class="aviso">Importante: o mesmo modelo usa peças diferentes conforme o motor. Informe para não comprar a peça errada.</span>
         <label for="quilometragem">Quilometragem</label>
         <input type="text" id="quilometragem" name="quilometragem" value="{{ dados.get('quilometragem', '') }}">
         <label for="chassi">Chassi (opcional, ajuda a achar a peça certa)</label>

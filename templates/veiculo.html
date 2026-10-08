@@ -16,6 +16,7 @@
     <p>
         <strong>Responsável:</strong> {{ veiculo['responsavel'] or '-' }}<br>
         <strong>Veículo:</strong> {{ veiculo['marca'] or '-' }} {{ veiculo['modelo'] }} {{ veiculo['cor'] }} {{ veiculo['ano'] }}<br>
+        <strong>Motor:</strong> {{ veiculo['motor'] or '-' }}<br>
         <strong>Km:</strong> {{ veiculo['quilometragem'] or '-' }}<br>
         <strong>Chassi:</strong> {{ veiculo['chassi'] or '-' }}<br>
         <strong>WhatsApp:</strong> {{ formatar_telefone(veiculo['telefone']) }}
@@ -31,8 +32,13 @@
         </form>
     </details>
     {% if not entrega %}
-    <details class="telefone-cliente" {{ 'open' if not (veiculo['marca'] and veiculo['modelo']) }}>
-        <summary>✏️ Corrigir marca, modelo, cor, ano, km e chassi do veículo</summary>
+    {% if not entrega and not veiculo['motor'] %}
+    <div class="aviso-custo">⚠️ Informe o <strong>motor</strong> do veículo (cilindrada e potência, exemplo: 1.8 8v 99cv).
+        O mesmo modelo usa peças diferentes conforme o motor; sem essa informação a peça pode vir errada.
+        Use "Corrigir marca, modelo, cor, ano, km, motor e chassi do veículo" logo abaixo.</div>
+    {% endif %}
+    <details class="telefone-cliente" {{ 'open' if not (veiculo['marca'] and veiculo['modelo'] and veiculo['motor']) }}>
+        <summary>✏️ Corrigir marca, modelo, cor, ano, km, motor e chassi do veículo</summary>
         {% if not (veiculo['marca'] and veiculo['modelo']) %}
         <p class="aviso">Informe a marca e o modelo para poder pesquisar peças na Web para este veículo.</p>
         {% endif %}
@@ -46,6 +52,8 @@
             <input type="text" id="dado_cor" name="cor" maxlength="{{ max_dado_veiculo }}" value="{{ veiculo['cor'] or '' }}">
             <label for="dado_ano">Ano</label>
             <input type="text" id="dado_ano" name="ano" inputmode="numeric" maxlength="9" value="{{ veiculo['ano'] or '' }}">
+            <label for="dado_motor">Motor: cilindrada e potência (exemplo: 1.8 8v 99cv)</label>
+            <input type="text" id="dado_motor" name="motor" maxlength="{{ max_dado_veiculo }}" value="{{ veiculo['motor'] or '' }}">
             <label for="dado_km">Quilometragem</label>
             <input type="text" id="dado_km" name="quilometragem" maxlength="{{ max_dado_veiculo }}" value="{{ veiculo['quilometragem'] or '' }}">
             <label for="dado_chassi">Chassi (17 letras e números; ajuda a achar a peça certa)</label>
@@ -234,8 +242,9 @@
                     <form method="GET" action="{{ url_for('buscar_peca_na_web', id=veiculo['id']) }}" target="_blank" rel="noopener">
                         <input type="text" name="peca" maxlength="{{ max_peca_busca }}" aria-label="Peça a pesquisar"
                                placeholder="Peça (ex.: pastilha de freio dianteira)">
-                        <span class="aviso">Pesquisa para {{ veiculo['marca'] }} {{ veiculo['modelo'] }} {{ veiculo['ano'] or '' }},
+                        <span class="aviso">Pesquisa para {{ veiculo['marca'] }} {{ veiculo['modelo'] }}{% if veiculo['motor'] %} {{ veiculo['motor'] }}{% endif %} {{ veiculo['ano'] or '' }},
                             pedindo o número original. Confira o número antes de comprar.
+                            {% if not veiculo['motor'] %}<strong>⚠️ Sem o motor informado a peça pode vir errada.</strong>{% endif %}
                             {% if veiculo['chassi'] %}Chassi para dizer no balcão: <strong>{{ veiculo['chassi'] }}</strong>.
                             {% else %}Informe o chassi do veículo para ter também a pesquisa pelo chassi.{% endif %}</span>
                         <div class="botoes-busca">
