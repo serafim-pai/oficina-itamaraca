@@ -136,3 +136,15 @@ class PecaCompradaNoComprovanteTest(EntregaBase):
         self.assertIn("R$ 35,00", comprovante)
         ficha = self.dono_c.get(f"/veiculos/{self.vid}").data.decode()
         self.assertIn("1x DISCO DE FREIO DIANTEIRO", ficha)
+
+
+class EtapaEntregueECorretorTest(EntregaBase):
+    def test_depois_da_entrega_a_etapa_aparece_como_entregue_e_o_corretor_esta_ligado(self):
+        self.garantias_ok()
+        self.assertEqual(self.fechar().status_code, 302)
+        ficha = self.dono_c.get(f"/veiculos/{self.vid}").data.decode()
+        trecho = ficha[ficha.index("Etapa do serviço</h2>"):]
+        self.assertIn(">Entregue</span>", trecho[:300])
+        self.assertNotIn(">Pronto para retirada</span>", trecho[:300])
+        self.assertIn("corretor.js", ficha)
+        self.assertEqual(self.dono_c.get("/static/corretor.js").status_code, 200)

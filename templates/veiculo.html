@@ -556,7 +556,7 @@
 
     <div class="etapa">
         <h2>Etapa do serviço</h2>
-        <p><span class="selo selo-etapa-{{ etapa|lower|replace('_', '-') }}">{{ etapas[etapa] }}</span></p>
+        <p><span class="selo {{ 'selo-entregue' if entrega else 'selo-etapa-' ~ etapa|lower|replace('_', '-') }}">{{ 'Entregue' if entrega else etapas[etapa] }}</span></p>
         {% if entrega %}
         <p class="aviso">O veículo já foi entregue.</p>
         {% else %}
@@ -762,5 +762,6 @@
     </script>
     <script src="{{ url_for('static', filename='continuo.js') }}"></script>
     <script src="{{ url_for('static', filename='rascunho.js') }}"></script>
+    <script src="{{ url_for('static', filename='corretor.js') }}"></script>
 </body>
 </html>
