@@ -403,7 +403,10 @@
         {% endif %}
 
         {% if orcamento_completo and not entrega %}
-        <form method="POST" action="{{ url_for('registrar_aprovacao', id=veiculo['id']) }}">
+        {# decisão já valendo: o formulário fica recolhido (só abre para mudar a decisão) #}
+        {% set recolher_decisao = situacao in ('APROVADO', 'RECUSADO') and not erros %}
+        {% if recolher_decisao %}<details class="telefone-cliente"><summary>✏️ Mudar a decisão do cliente</summary>{% endif %}
+        <form data-rascunho="aprovacao" method="POST" action="{{ url_for('registrar_aprovacao', id=veiculo['id']) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="assinatura" value="{{ assinatura }}">
             <strong>O cliente *</strong>
@@ -429,6 +432,7 @@
 
             <button type="submit">Registrar decisão do cliente</button>
         </form>
+        {% if recolher_decisao %}</details>{% endif %}
         {% elif not entrega %}
         <p class="aviso">Para registrar a decisão do cliente, todos os serviços precisam ter valor (veja o orçamento acima).</p>
         {% endif %}
@@ -515,7 +519,9 @@
 
         {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
         {% if aprovado_vigente %}
-        <form method="POST" action="{{ url_for('registrar_prazo', id=veiculo['id']) }}">
+        {% set recolher_prazo = prazos and not erros %}
+        {% if recolher_prazo %}<details class="telefone-cliente"><summary>✏️ Mudar o prazo de entrega</summary>{% endif %}
+        <form data-rascunho="prazo" method="POST" action="{{ url_for('registrar_prazo', id=veiculo['id']) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <label for="data_prevista">{{ 'Novo prazo de entrega' if prazos else 'Data de entrega prometida' }} *</label>
             <input type="date" id="data_prevista" name="data_prevista" min="{{ hoje_iso }}" max="{{ maximo_iso }}" required>
@@ -525,6 +531,7 @@
             {% endif %}
             <button type="submit">{{ 'Mudar o prazo' if prazos else 'Definir o prazo' }}</button>
         </form>
+        {% if recolher_prazo %}</details>{% endif %}
         {% else %}
         <p class="aviso">O prazo só pode ser definido depois que o cliente aprovar o orçamento.</p>
         {% endif %}

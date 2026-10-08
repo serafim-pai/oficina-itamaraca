@@ -244,3 +244,13 @@ class AprovacaoComCsrfTest(AprovacaoBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FormularioRecolhidoTest(AprovacaoBase):
+    def test_depois_de_decidir_o_formulario_fica_recolhido(self):
+        antes = self.func.get(f"/veiculos/{self.vid}").data.decode()
+        self.assertNotIn("Mudar a decisão do cliente", antes)
+        self.decidir("APROVADO")
+        depois = self.func.get(f"/veiculos/{self.vid}").data.decode()
+        self.assertIn("Mudar a decisão do cliente", depois)
+        self.assertIn('name="assinatura"', depois)      # o formulário continua lá, só recolhido
