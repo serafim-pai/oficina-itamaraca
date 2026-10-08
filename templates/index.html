@@ -32,7 +32,7 @@
     {% endif %}
 
     <h2>Cadastrar veículo</h2>
-    <form method="POST" action="{{ url_for('cadastrar_veiculo') }}" enctype="multipart/form-data">
+    <form data-rascunho="cadastro-veiculo" method="POST" action="{{ url_for('cadastrar_veiculo') }}" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="responsavel">Nome do responsável</label>
         <input type="text" id="responsavel" name="responsavel" value="{{ dados.get('responsavel', '') }}">
@@ -163,5 +163,6 @@
             aviso.textContent = problemas.join(' ');
         });
     </script>
+    <script src="{{ url_for('static', filename='rascunho.js') }}"></script>
 </body>
 </html>

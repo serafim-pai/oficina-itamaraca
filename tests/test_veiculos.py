@@ -89,3 +89,17 @@ class FormularioDeProblemaTest(BaseTest):
         pagina = func.get(f"/veiculos/{vid}").data.decode()
         self.assertIn("Registrar outro problema", pagina)
         self.assertIn('action="/veiculos/%d/servicos"' % vid, pagina)
+
+
+class RascunhoTest(BaseTest):
+    def test_formularios_de_cadastro_e_de_problema_usam_o_rascunho_automatico(self):
+        func = self.funcionario()
+        pagina = func.get("/").data.decode()
+        self.assertIn('data-rascunho="cadastro-veiculo"', pagina)
+        self.assertIn("rascunho.js", pagina)
+        func.post("/veiculos", data={"placa": "ABC1D23", "documento_deixado": "on"})
+        vid = self.sql("SELECT id FROM veiculos")[0]["id"]
+        pagina = func.get(f"/veiculos/{vid}").data.decode()
+        self.assertIn('data-rascunho="problema"', pagina)
+        self.assertIn("rascunho.js", pagina)
+        self.assertEqual(func.get("/static/rascunho.js").status_code, 200)
