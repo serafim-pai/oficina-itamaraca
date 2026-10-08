@@ -116,3 +116,10 @@ class MaiusculasTest(BaseTest):
         func.post(f"/veiculos/{v['id']}/dados", data={"marca": "fiat", "modelo": "uno", "cor": "azul claro"})
         v = self.sql("SELECT * FROM veiculos")[0]
         self.assertEqual((v["marca"], v["modelo"], v["cor"]), ("FIAT", "UNO", "AZUL CLARO"))
+
+
+class MaiusculasNaDigitacaoTest(BaseTest):
+    def test_css_mostra_maiusculas_nos_campos_do_veiculo(self):
+        css = self.c.get("/static/estilo.css").data.decode()
+        self.assertIn('input[name="placa"]', css)
+        self.assertIn("text-transform: uppercase", css)

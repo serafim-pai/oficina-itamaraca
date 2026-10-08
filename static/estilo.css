@@ -288,3 +288,8 @@ table.estoque-cartoes td.acoes-estoque summary { display: inline-block; padding:
 table.estoque-cartoes td.acoes-estoque summary::-webkit-details-marker { display: none; }
 table.estoque-cartoes td.acoes-estoque details[open] > summary { background: #1a3c6e; color: #fff; margin-bottom: 8px; }
 table.estoque-cartoes td.acoes-estoque button { margin-top: 0; }
+
+/* Placa, responsável, marca, modelo e cor aparecem em maiúsculas já na digitação (o sistema grava assim). */
+input[name="responsavel"], input[name="placa"], input[name="marca"], input[name="modelo"], input[name="cor"] {
+    text-transform: uppercase;
+}
