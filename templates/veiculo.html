@@ -807,8 +807,14 @@
             campo.addEventListener('change', () => {     // fotos escolhidas agora entram junto com as anteriores
                 const chave = f => f.name + '|' + f.size + '|' + f.lastModified;
                 const ja = new Set(lista.map(chave));
-                Array.from(campo.files).forEach(f => { if (!ja.has(chave(f))) lista.push(f); });
+                const repetidas = [];
+                Array.from(campo.files).forEach(f => { if (ja.has(chave(f))) repetidas.push(f.name); else lista.push(f); });
                 sincronizar();
+                if (repetidas.length) {              // avisa em vez de ignorar em silêncio
+                    aviso.style.display = 'block';
+                    aviso.textContent = (aviso.textContent ? aviso.textContent + ' ' : '') + 'A foto "' + repetidas.join('", "') +
+                        '" já está na lista e não foi repetida.';
+                }
             });
         })();
     </script>
