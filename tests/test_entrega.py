@@ -218,11 +218,11 @@ class FecharEntregaTest(EntregaBase):
         self.assertEqual(self.itens()[1]["garantia_ate"], "2027-04-15")
 
     def test_botao_fica_desabilitado_enquanto_falta_garantia(self):
+        self.marcar_pronto(self.vid)
         pagina = self.pagina()
         self.assertIn("Falta informar o tempo de garantia de <strong>2</strong>", pagina)
         self.assertRegex(pagina, r"<button type=\"submit\" disabled>Fechar a entrega de hoje")
-        self.garantias_ok()
-        self.marcar_pronto(self.vid)          # com a garantia informada e o veículo pronto, o botão liga
+        self.garantias_ok()                   # com a garantia informada (e o veículo pronto), o botão liga
         self.assertNotRegex(self.pagina(), r"<button type=\"submit\" disabled>Fechar a entrega")
 
     def test_exige_as_condicoes_que_cancelam_a_garantia(self):
@@ -254,6 +254,7 @@ class FecharEntregaTest(EntregaBase):
         self.assertIn("Minhas condições, mas ainda falta garantia nos serviços".encode(), r.data)
 
     def test_o_formulario_ja_vem_com_o_texto_sugerido(self):
+        self.marcar_pronto(self.vid)
         self.assertIn("A garantia deixa de valer se:", self.pagina())
 
     def test_so_o_dono_fecha(self):
@@ -264,6 +265,7 @@ class FecharEntregaTest(EntregaBase):
 
     def test_so_o_dono_ve_o_formulario(self):
         self.garantias_ok()
+        self.marcar_pronto(self.vid)
         self.assertIn('name="condicoes"', self.pagina(self.dono_c))
         pagina = self.pagina(self.func)
         self.assertNotIn('name="condicoes"', pagina)

@@ -198,6 +198,7 @@ class ObrigatoriedadeDaFotoTest(Base):
         self.assertEqual(len(self.arquivos_no_disco()), 6)
 
     def test_o_formulario_pede_as_fotos_e_tem_previa(self):
+        self.marcar_pronto(self.vid)
         pagina = self.pagina()
         self.assertIn('name="fotos_entrega"', pagina)
         self.assertIn('enctype="multipart/form-data"', pagina)

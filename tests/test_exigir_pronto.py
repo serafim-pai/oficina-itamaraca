@@ -46,15 +46,17 @@ class ExigirProntoTest(test_entrega.EntregaBase):
         self.assertEqual(self.fechar_sem_marcar().status_code, 200)
         self.assertEqual(self.entregas(), [])
 
-    def test_a_tela_avisa_e_desabilita_o_botao_ate_ficar_pronto(self):
+    def test_a_tela_avisa_e_esconde_fotos_e_botao_ate_ficar_pronto(self):
         pagina = self.pagina()
         self.assertIn("A entrega só pode ser fechada quando ele", pagina)
-        self.assertRegex(pagina, r"<button type=\"submit\" disabled>Fechar a entrega de hoje")
+        self.assertNotIn('name="fotos_entrega"', pagina)          # nada de anexar fotos antes da hora
+        self.assertNotIn("Fechar a entrega de hoje", pagina)
         self.etapa("EM_REPARO")
         self.etapa("PRONTO")
         pagina = self.pagina()
         self.assertNotIn("A entrega só pode ser fechada quando ele", pagina)
-        self.assertNotRegex(pagina, r"<button type=\"submit\" disabled>Fechar a entrega de hoje")
+        self.assertIn('name="fotos_entrega"', pagina)
+        self.assertIn("Fechar a entrega de hoje", pagina)
 
     def test_depois_de_desfazer_a_entrega_o_veiculo_continua_pronto(self):
         self.etapa("EM_REPARO")
