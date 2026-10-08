@@ -279,3 +279,12 @@ table.estoque-cartoes td.serve-para { grid-column: 1 / -1; }
 table.estoque-cartoes td.acoes-estoque { grid-column: 1 / -1; }
 table.tabela-cartoes td.num, table.tabela-cartoes .col-curta { text-align: left; width: auto; }
 table.estoque-cartoes td.acoes-estoque details { margin-bottom: 8px; }
+
+/* Estoque: Entrada, Ajustar e Editar parecem botões e ficam lado a lado; o formulário aberto usa a linha inteira */
+table.estoque-cartoes td.acoes-estoque { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+table.estoque-cartoes td.acoes-estoque details { margin: 0; }
+table.estoque-cartoes td.acoes-estoque details[open] { flex-basis: 100%; }
+table.estoque-cartoes td.acoes-estoque summary { display: inline-block; padding: 6px 14px; border: 1px solid #1a3c6e; border-radius: 4px; background: #eef2f9; color: #1a3c6e; font-weight: bold; font-size: 13px; cursor: pointer; list-style: none; }
+table.estoque-cartoes td.acoes-estoque summary::-webkit-details-marker { display: none; }
+table.estoque-cartoes td.acoes-estoque details[open] > summary { background: #1a3c6e; color: #fff; margin-bottom: 8px; }
+table.estoque-cartoes td.acoes-estoque button { margin-top: 0; }
