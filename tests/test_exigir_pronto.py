@@ -74,3 +74,13 @@ class ExigirProntoTest(test_entrega.EntregaBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PreviaDasFotosDaEntregaTest(test_entrega.EntregaBase):
+    def test_a_previa_permite_trocar_e_excluir_antes_de_fechar(self):
+        self.garantias_ok()
+        self.marcar_pronto(self.vid)
+        pagina = self.pagina()
+        self.assertIn("dá para Trocar ou Excluir cada uma", pagina)
+        self.assertIn("Tirar esta foto da entrega?", pagina)
+        self.assertIn("new DataTransfer()", pagina)

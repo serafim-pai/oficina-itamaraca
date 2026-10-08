@@ -670,7 +670,8 @@
             <label for="fotos_entrega">Fotos do veículo na entrega *</label>
             <input type="file" id="fotos_entrega" name="fotos_entrega" accept="image/*" multiple>
             <span class="aviso">Tire ou escolha de 1 a {{ max_fotos }} fotos do carro como ele está saindo da oficina ({{ max_mb }} MB cada;
-                JPG, PNG, WEBP ou GIF). Elas ficam guardadas como prova do estado em que o carro saiu e aparecem no comprovante.</span>
+                JPG, PNG, WEBP ou GIF). Elas ficam guardadas como prova do estado em que o carro saiu e aparecem no comprovante.
+                <strong>Confira as fotos abaixo antes de fechar: dá para Trocar ou Excluir cada uma.</strong></span>
             <div id="aviso-fotos-entrega" class="erros" style="display:none"></div>
             <div id="previa-fotos-entrega" class="galeria"></div>
             <label for="condicoes">Condições que cancelam a garantia *</label>
@@ -734,21 +735,40 @@
     {% endif %}
 
     <script>
-        // Prévia das fotos da entrega e aviso na hora se alguma passa do limite
+        // Prévia das fotos da entrega, com Trocar e Excluir em cada uma ANTES de fechar a entrega (para
+        // desfazer um engano, como anexar a foto errada), e aviso na hora se alguma passa do limite
         // (o servidor confere tudo de novo; isto é só para ajudar quem está digitando).
         (function () {
             const campo = document.getElementById('fotos_entrega');
             if (!campo) return;
             const MAX_FOTOS = {{ max_fotos }};
             const MAX_BYTES = {{ max_mb }} * 1024 * 1024;
-            campo.addEventListener('change', () => {
-                const previa = document.getElementById('previa-fotos-entrega');
-                const aviso = document.getElementById('aviso-fotos-entrega');
+            const previa = document.getElementById('previa-fotos-entrega');
+            const aviso = document.getElementById('aviso-fotos-entrega');
+            let lista = [];
+
+            function sincronizar() {                 // o que o formulário vai enviar é exatamente esta lista
+                try {
+                    const dt = new DataTransfer();
+                    lista.forEach(f => dt.items.add(f));
+                    campo.files = dt.files;
+                } catch (e) { /* navegador antigo: fica só com a escolha normal */ }
+                desenhar();
+            }
+
+            function botao(texto, perigo) {
+                const b = document.createElement('button');
+                b.type = 'button';                   // não pode enviar o formulário
+                b.className = 'botao-pequeno' + (perigo ? ' perigo' : '');
+                b.textContent = texto;
+                return b;
+            }
+
+            function desenhar() {
                 previa.innerHTML = '';
                 const problemas = [];
-                const arquivos = Array.from(campo.files);
-                if (arquivos.length > MAX_FOTOS) problemas.push('Escolha no máximo ' + MAX_FOTOS + ' fotos.');
-                arquivos.forEach(arquivo => {
+                if (lista.length > MAX_FOTOS) problemas.push('Escolha no máximo ' + MAX_FOTOS + ' fotos.');
+                lista.forEach((arquivo, posicao) => {
                     if (arquivo.size > MAX_BYTES) problemas.push('"' + arquivo.name + '" passa de {{ max_mb }} MB.');
                     const quadro = document.createElement('div');
                     quadro.className = 'foto-card';
@@ -757,10 +777,38 @@
                     img.src = URL.createObjectURL(arquivo);
                     img.onload = () => URL.revokeObjectURL(img.src);
                     quadro.appendChild(img);
+
+                    const trocar = document.createElement('label');
+                    trocar.className = 'botao-pequeno';
+                    trocar.textContent = 'Trocar';
+                    const outra = document.createElement('input');   // sem "name": não vai no envio
+                    outra.type = 'file';
+                    outra.accept = 'image/*';
+                    outra.addEventListener('change', () => {
+                        if (outra.files.length) { lista[posicao] = outra.files[0]; sincronizar(); }
+                    });
+                    trocar.appendChild(outra);
+                    quadro.appendChild(trocar);
+
+                    const excluir = botao('Excluir', true);
+                    excluir.addEventListener('click', () => {
+                        if (confirm('Tirar esta foto da entrega? Ela não será enviada.')) {
+                            lista.splice(posicao, 1);
+                            sincronizar();
+                        }
+                    });
+                    quadro.appendChild(excluir);
                     previa.appendChild(quadro);
                 });
                 aviso.style.display = problemas.length ? 'block' : 'none';
                 aviso.textContent = problemas.join(' ');
+            }
+
+            campo.addEventListener('change', () => {     // fotos escolhidas agora entram junto com as anteriores
+                const chave = f => f.name + '|' + f.size + '|' + f.lastModified;
+                const ja = new Set(lista.map(chave));
+                Array.from(campo.files).forEach(f => { if (!ja.has(chave(f))) lista.push(f); });
+                sincronizar();
             });
         })();
     </script>
