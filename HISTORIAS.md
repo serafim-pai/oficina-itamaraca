@@ -274,3 +274,7 @@ Vários modelos na mesma linha de "Serve para":
   tela e conta no limite de 40 carros por item). O mesmo carro repetido conta uma vez só. Marcas ou anos
   diferentes continuam em linhas separadas.
 
+Os itens do estoque também aparecem como **cartões** (nome em destaque, depois tipo, quantidade, mínimo, custo,
+preço e os carros em que serve), com espaço para os formulários de Entrada, Ajustar e Editar, que antes ficavam
+espremidos numa coluna estreita.
+

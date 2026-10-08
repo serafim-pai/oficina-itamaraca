@@ -271,3 +271,11 @@ table.veiculos-cartoes td.placa { grid-column: 1 / -1; order: -2; font-size: 22p
 table.veiculos-cartoes td.responsavel { grid-column: 1 / -1; order: -1; font-size: 16px; }
 table.veiculos-cartoes td.fotos { grid-column: 1 / -1; }
 table.veiculos-cartoes td.status { grid-column: span 2; }
+
+/* Estoque: cada item é um cartão; o nome em destaque e as ações com espaço para os formulários */
+table.estoque-cartoes tr { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px 14px; }
+table.estoque-cartoes td.item-nome { grid-column: 1 / -1; font-size: 17px; font-weight: bold; }
+table.estoque-cartoes td.serve-para { grid-column: 1 / -1; }
+table.estoque-cartoes td.acoes-estoque { grid-column: 1 / -1; }
+table.tabela-cartoes td.num, table.tabela-cartoes .col-curta { text-align: left; width: auto; }
+table.estoque-cartoes td.acoes-estoque details { margin-bottom: 8px; }
