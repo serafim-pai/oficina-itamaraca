@@ -67,6 +67,12 @@ TRAVADOS_APOS_ENTREGA = {"registrar_servico", "registrar_resolucao", "registrar_
                          "editar_problema"}
 MAX_DADO_VEICULO = 40                # letras de marca, modelo, cor e quilometragem do veículo
 MAX_PECA_BUSCA = 100                 # letras do nome da peça pesquisada na Web
+# Quem fornece a peça de cada serviço. Sem situação = o serviço não precisa de peça (ou ainda não foi definido).
+SITUACOES_PECA = {
+    "A_DECIDIR": "A decidir com o cliente",
+    "CLIENTE_TRAZ": "O cliente traz a peça",
+    "OFICINA_COMPRA": "A oficina compra a peça",
+}
 MAX_REFERENCIA = 300                 # letras da anotação "número original / onde comprar"
 # Sites onde a pesquisa de peça é aberta (em outra aba). {q} é o texto da pesquisa já codificado.
 SITES_BUSCA = {
@@ -457,6 +463,14 @@ def init_db():
     for tabela in ("entrega_itens", "entrega_itens_desfeitos"):
         if "pecas_centavos" not in [c[1] for c in db.execute(f"PRAGMA table_info({tabela})")]:
             db.execute(f"ALTER TABLE {tabela} ADD COLUMN pecas_centavos INTEGER NOT NULL DEFAULT 0")
+    # Quem fornece a peça de cada serviço (cliente traz ou oficina compra, com o preço) e se ela já está em mãos.
+    # O preço da peça comprada pela oficina entra em pecas_centavos, junto com as peças do estoque.
+    if "peca_situacao" not in colunas:
+        db.execute("ALTER TABLE servicos ADD COLUMN peca_situacao TEXT")
+    if "peca_compra_centavos" not in colunas:
+        db.execute("ALTER TABLE servicos ADD COLUMN peca_compra_centavos INTEGER NOT NULL DEFAULT 0")
+    if "peca_em_maos" not in colunas:
+        db.execute("ALTER TABLE servicos ADD COLUMN peca_em_maos INTEGER NOT NULL DEFAULT 0")
     # Peça de referência de cada serviço: número original e onde comprar (só anotação, não entra no orçamento)
     if "referencia_peca" not in colunas:
         db.execute("ALTER TABLE servicos ADD COLUMN referencia_peca TEXT")
@@ -1412,6 +1426,7 @@ def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False):
                                "ORDER BY tipo, nome").fetchall()
     grupos_estoque = agrupar_por_aplicacao(itens_estoque, aplicacoes_dos_itens(db), veiculo)
     faltam = sum(1 for s in servicos if s["valor_centavos"] is None)
+    faltam_pecas = pecas_pendentes(servicos)
     orcamento_completo = bool(servicos) and faltam == 0
     aprovacoes = db.execute("SELECT * FROM aprovacoes WHERE veiculo_id = ? ORDER BY id DESC", (id,)).fetchall()
     situacao, situacao_texto = situacao_aprovacao(servicos, aprovacoes[0] if aprovacoes else None)
@@ -1435,7 +1450,8 @@ def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False):
         for p in db.execute("SELECT ep.* FROM entrega_pecas ep JOIN entrega_itens ei "
                             "ON ei.id = ep.entrega_item_id WHERE ei.entrega_id = ? ORDER BY ep.id", (entrega["id"],)):
             pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
-    return render_template("veiculo.html", max_dado_veiculo=MAX_DADO_VEICULO, sites_busca=SITES_BUSCA, max_peca_busca=MAX_PECA_BUSCA,
+    return render_template("veiculo.html", max_dado_veiculo=MAX_DADO_VEICULO, situacoes_peca=SITUACOES_PECA,
+                           faltam_pecas=faltam_pecas, sites_busca=SITES_BUSCA, max_peca_busca=MAX_PECA_BUSCA,
                            max_referencia=MAX_REFERENCIA, pecas_servicos=pecas_servicos, itens_estoque=itens_estoque,
                            grupos_estoque=grupos_estoque,
                            pecas_entrega=pecas_entrega, etapa=etapa, etapas=ETAPAS, historico_etapas=historico_etapas,
@@ -1603,6 +1619,62 @@ def registrar_referencia(id, servico_id):
     if len(texto) > MAX_REFERENCIA:
         return pagina_veiculo(id, [f"A anotação da peça pode ter no máximo {MAX_REFERENCIA} letras."])
     db.execute("UPDATE servicos SET referencia_peca = ? WHERE id = ?", (texto or None, servico_id))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+def pecas_pendentes(servicos):
+    """Serviços cuja peça ainda não está em mãos (o mecânico não deve começar antes)."""
+    return [s for s in servicos if s["peca_situacao"] and not s["peca_em_maos"]]
+
+
+def servico_editavel(db, id, servico_id):
+    """Devolve (serviço, erro). 404 se o serviço não for do veículo; depois da entrega nada mais muda."""
+    buscar_veiculo(db, id)
+    servico = db.execute("SELECT * FROM servicos WHERE id = ? AND veiculo_id = ?", (servico_id, id)).fetchone()
+    if not servico:
+        abort(404)
+    if db.execute("SELECT 1 FROM entregas WHERE veiculo_id = ?", (id,)).fetchone():
+        return servico, "O veículo já foi entregue: a peça não pode mais ser mudada."
+    return servico, None
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/peca", methods=["POST"])
+def registrar_peca_origem(id, servico_id):
+    """Só o dono define quem fornece a peça: o cliente traz, a oficina compra (com o preço, que entra no
+    orçamento e pede nova aprovação do cliente) ou a decidir. Vazio = o serviço não precisa de peça."""
+    so_dono()
+    db = get_db()
+    servico, erro = servico_editavel(db, id, servico_id)
+    if erro:
+        return pagina_veiculo(id, [erro])
+    situacao = request.form.get("situacao", "").strip().upper()
+    if situacao and situacao not in SITUACOES_PECA:
+        return pagina_veiculo(id, ["Escolha quem fornece a peça."])
+    preco = 0
+    if situacao == "OFICINA_COMPRA":
+        preco = interpretar_valor(request.form.get("preco", ""))
+        if preco is None:
+            return pagina_veiculo(id, ["Informe o preço da peça que a oficina vai comprar (exemplo: 120,00)."])
+    mudou = (servico["peca_situacao"] or "") != situacao
+    db.execute("UPDATE servicos SET peca_situacao = ?, peca_compra_centavos = ?, peca_em_maos = ? WHERE id = ?",
+               (situacao or None, preco, 0 if mudou else servico["peca_em_maos"], servico_id))
+    recalcular_pecas(db, servico_id)
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/peca/maos", methods=["POST"])
+def registrar_peca_em_maos(id, servico_id):
+    """Dono e funcionário marcam que a peça chegou (ou desmarcam, para corrigir um engano)."""
+    db = get_db()
+    servico, erro = servico_editavel(db, id, servico_id)
+    if erro:
+        return pagina_veiculo(id, [erro])
+    if not servico["peca_situacao"]:
+        return pagina_veiculo(id, ["Antes, diga quem fornece a peça deste serviço."])
+    db.execute("UPDATE servicos SET peca_em_maos = ? WHERE id = ?",
+               (1 if request.form.get("em_maos") == "1" else 0, servico_id))
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
 
@@ -1970,6 +2042,10 @@ def registrar_etapa(id):
     elif nova == "EM_REPARO" and atual == "AGUARDANDO_INICIO" \
             and situacao_aprovacao(servicos, ultima_aprovacao)[0] != "APROVADO":
         erros.append("O reparo só pode começar depois que o cliente aprovar o orçamento.")
+    elif nova == "EM_REPARO" and atual == "AGUARDANDO_INICIO" and pecas_pendentes(servicos):
+        erros.append("O reparo só pode começar com a peça em mãos. Falta a peça de: "
+                     + ", ".join(s["tipo"] for s in pecas_pendentes(servicos))
+                     + ". Marque \"Peça em mãos\" quando ela chegar.")
     if erros:
         return pagina_veiculo(id, erros)
 
@@ -2113,7 +2189,9 @@ def mover_estoque(db, item_id, variacao, tipo, motivo=None, veiculo_id=None, ser
 def recalcular_pecas(db, servico_id):
     """Atualiza a soma (em centavos) das peças usadas em um serviço."""
     db.execute("UPDATE servicos SET pecas_centavos = COALESCE((SELECT SUM(quantidade * preco_centavos) "
-               "FROM servico_pecas WHERE servico_id = servicos.id), 0) WHERE id = ?", (servico_id,))
+               "FROM servico_pecas WHERE servico_id = servicos.id), 0) "
+               "+ CASE WHEN peca_situacao = 'OFICINA_COMPRA' THEN peca_compra_centavos ELSE 0 END WHERE id = ?",
+               (servico_id,))
 
 
 def devolver_pecas(db, condicao, parametros, motivo):

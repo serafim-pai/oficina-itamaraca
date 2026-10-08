@@ -244,8 +244,38 @@
                 {% if s['como_resolver'] %}<span class="aviso">Por {{ s['resolvido_por'] }}</span>{% endif %}
             </td>
             <td class="referencia-peca" data-label="Peça de referência">
-                {% if s['referencia_peca'] %}<p>{{ s['referencia_peca'] }}</p>{% elif entrega %}-{% endif %}
+                {% if s['referencia_peca'] %}<p>{{ s['referencia_peca'] }}</p>{% elif entrega and not s['peca_situacao'] %}-{% endif %}
+                {% if s['peca_situacao'] %}
+                <p class="detalhe">🧩 <strong>{{ situacoes_peca[s['peca_situacao']] }}</strong>
+                    {% if s['peca_situacao'] == 'OFICINA_COMPRA' %}({{ formatar_dinheiro(s['peca_compra_centavos']) }}, já somado ao orçamento){% endif %}
+                    <br>{{ '✅ Peça em mãos' if s['peca_em_maos'] else '⏳ Peça ainda não está em mãos' }}</p>
                 {% if not entrega %}
+                <form method="POST" action="{{ url_for('registrar_peca_em_maos', id=veiculo['id'], servico_id=s['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="em_maos" value="{{ '0' if s['peca_em_maos'] else '1' }}">
+                    <button type="submit">{{ 'Desmarcar peça em mãos' if s['peca_em_maos'] else '📦 Marcar peça em mãos' }}</button>
+                </form>
+                {% endif %}
+                {% endif %}
+                {% if not entrega %}
+                {% if usuario and usuario['tipo'] == 'DONO' %}
+                <details>
+                    <summary>🧩 {{ 'Mudar quem fornece a peça' if s['peca_situacao'] else 'Quem fornece a peça?' }}</summary>
+                    <form data-rascunho="peca-{{ s['id'] }}" method="POST" action="{{ url_for('registrar_peca_origem', id=veiculo['id'], servico_id=s['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <select name="situacao" aria-label="Quem fornece a peça">
+                            <option value="">Este serviço não usa peça</option>
+                            {% for chave, texto in situacoes_peca.items() %}
+                            <option value="{{ chave }}" {{ 'selected' if s['peca_situacao'] == chave }}>{{ texto }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" name="preco" inputmode="decimal" placeholder="Preço da peça, se a oficina comprar (0,00)"
+                               aria-label="Preço da peça" value="{{ formatar_dinheiro(s['peca_compra_centavos'], false) if s['peca_compra_centavos'] else '' }}">
+                        <span class="aviso">Se a oficina comprar, o preço soma no orçamento e o cliente precisa aprovar de novo.</span>
+                        <button type="submit">Salvar</button>
+                    </form>
+                </details>
+                {% endif %}
                 <details>
                     <summary>🔎 Pesquisar peça na Web</summary>
                     {% if veiculo['marca'] and veiculo['modelo'] %}
@@ -467,6 +497,10 @@
         {% else %}
         {% if etapa == 'AGUARDANDO_INICIO' and not aprovado_vigente %}
         <p class="aviso">O reparo só pode começar depois que o cliente aprovar o orçamento.</p>
+        {% endif %}
+        {% if etapa == 'AGUARDANDO_INICIO' and faltam_pecas %}
+        <div class="aviso-custo">⏳ Falta a peça em mãos de: <strong>{{ faltam_pecas|map(attribute='tipo')|join(', ') }}</strong>.
+            O reparo só começa depois de marcar "Peça em mãos".</div>
         {% endif %}
         <form method="POST" action="{{ url_for('registrar_etapa', id=veiculo['id']) }}" class="botoes-etapa">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
