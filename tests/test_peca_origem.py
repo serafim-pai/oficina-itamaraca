@@ -89,3 +89,12 @@ class PecaOrigemTest(AprovacaoBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TotalAprovadoComPecasTest(AprovacaoBase):
+    def test_a_decisao_guarda_o_total_com_as_pecas_que_o_cliente_viu(self):
+        self.dono_c.post(f"/veiculos/{self.vid}/servicos/{self.sid1}/peca",
+                         data={"situacao": "OFICINA_COMPRA", "preco": "90,00"})
+        self.decidir("APROVADO")
+        total = self.sql("SELECT total_centavos FROM aprovacoes")[0]["total_centavos"]
+        self.assertEqual(total, 15000 + 25050 + 9000)

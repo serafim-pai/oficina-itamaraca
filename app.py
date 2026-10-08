@@ -1758,7 +1758,7 @@ def registrar_aprovacao(id):
     if erros:
         return pagina_veiculo(id, erros)
 
-    total = sum(s["valor_centavos"] for s in servicos)
+    total = sum(s["valor_centavos"] + s["pecas_centavos"] for s in servicos)       # o que o cliente viu: serviços + peças
     db.execute("INSERT INTO aprovacoes (veiculo_id, decisao, forma, observacao, total_centavos, "
                "assinatura, registrado_por) VALUES (?, ?, ?, ?, ?, ?, ?)",
                (id, decisao, forma, observacao or None, total, assinatura_orcamento(servicos),
