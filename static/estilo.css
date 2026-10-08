@@ -293,3 +293,6 @@ table.estoque-cartoes td.acoes-estoque button { margin-top: 0; }
 input[name="responsavel"], input[name="placa"], input[name="marca"], input[name="modelo"], input[name="cor"] {
     text-transform: uppercase;
 }
+
+/* Espaço entre os botões de etapa e o histórico das etapas */
+.historico-etapas { margin-top: 14px; }
