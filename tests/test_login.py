@@ -224,7 +224,8 @@ class CsrfTest(BaseTest):
     def test_cadastro_de_veiculo_com_token_grava(self):
         c = self.funcionario()
         r = c.post("/veiculos", data={**DADOS_VEICULO, "csrf_token": self.token(c, "/")})
-        self.assertTrue(vai_para(r, "/veiculos/1"))
+        self.assertEqual(r.status_code, 302)
+        self.assertRegex(r.headers["Location"], r"/veiculos/[0-9]+")
         self.assertEqual(self.total_veiculos(), 1)
 
     def test_sair_sem_token_nao_desloga(self):

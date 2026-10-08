@@ -127,7 +127,7 @@
     </div>
 
     {% if erros %}
-    <div class="erros">
+    <div class="erros" data-erro-formulario>
         <ul>
             {% for erro in erros %}
             <li>{{ erro }}</li>
@@ -703,5 +703,6 @@
             });
         })();
     </script>
+    <script src="{{ url_for('static', filename='continuo.js') }}"></script>
 </body>
 </html>

@@ -11,7 +11,7 @@
     <h1>Usuários</h1>
 
     {% if erro %}
-    <div class="erros">{{ erro }}</div>
+    <div class="erros" data-erro-formulario>{{ erro }}</div>
     {% endif %}
 
     <h2>Novo usuário</h2>
@@ -54,5 +54,6 @@
         </tr>
         {% endfor %}
     </table>
+    <script src="{{ url_for('static', filename='continuo.js') }}"></script>
 </body>
 </html>

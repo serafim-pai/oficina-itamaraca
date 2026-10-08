@@ -16,7 +16,7 @@
     <div class="ok">✔ Alterações salvas.</div>
     {% endif %}
     {% if erros %}
-    <div class="erros">
+    <div class="erros" data-erro-formulario>
         <ul>
             {% for erro in erros %}
             <li>{{ erro }}</li>
@@ -209,5 +209,6 @@
         </ul>
     </details>
     {% endif %}
+    <script src="{{ url_for('static', filename='continuo.js') }}"></script>
 </body>
 </html>

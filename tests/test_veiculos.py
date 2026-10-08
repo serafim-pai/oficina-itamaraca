@@ -65,3 +65,13 @@ class AvisoDeCadastroTest(BaseTest):
         func = self.funcionario()
         self.assertNotIn("cadastrado com sucesso", func.get("/").data.decode())
         self.assertNotIn("cadastrado com sucesso", func.get("/?cadastrado=999").data.decode())
+
+
+class PaginaCorridaTest(BaseTest):
+    def test_paginas_de_trabalho_carregam_o_script_que_mantem_o_lugar_da_tela(self):
+        func = self.funcionario()
+        func.post("/veiculos", data={"placa": "ABC1D23", "documento_deixado": "on"})
+        vid = self.sql("SELECT id FROM veiculos")[0]["id"]
+        for caminho in (f"/veiculos/{vid}", "/estoque"):
+            self.assertIn("continuo.js", func.get(caminho).data.decode())
+        self.assertEqual(func.get("/static/continuo.js").status_code, 200)
