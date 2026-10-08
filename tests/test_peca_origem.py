@@ -5,12 +5,13 @@ import unittest
 
 from base import BaseTest, oficina
 from test_aprovacao import AprovacaoBase
+from test_entrega import EntregaBase
 
 
 class PecaOrigemTest(AprovacaoBase):
     def peca(self, situacao, preco="", cliente=None, sid=None):
         return (cliente or self.dono_c).post(f"/veiculos/{self.vid}/servicos/{sid or self.sid1}/peca",
-                                             data={"situacao": situacao, "preco": preco})
+                                             data={"situacao": situacao, "preco": preco, "peca_nome": "DISCO DE FREIO"})
 
     def maos(self, marcar=True, cliente=None, sid=None):
         return (cliente or self.func).post(f"/veiculos/{self.vid}/servicos/{sid or self.sid1}/peca/maos",
@@ -47,6 +48,12 @@ class PecaOrigemTest(AprovacaoBase):
         self.peca("OFICINA_COMPRA", "")
         self.assertIsNone(self.servico()["peca_situacao"])
         self.assertEqual(self.peca("OFICINA_COMPRA", "abc").status_code, 200)
+        self.assertIsNone(self.servico()["peca_situacao"])
+
+    def test_oficina_compra_exige_o_nome_da_peca(self):
+        r = self.dono_c.post(f"/veiculos/{self.vid}/servicos/{self.sid1}/peca",
+                             data={"situacao": "OFICINA_COMPRA", "preco": "90,00", "peca_nome": "  "})
+        self.assertIn("qual peça", r.data.decode())
         self.assertIsNone(self.servico()["peca_situacao"])
 
     def test_situacao_invalida_nao_grava(self):
@@ -96,7 +103,7 @@ if __name__ == "__main__":
 class TotalAprovadoComPecasTest(AprovacaoBase):
     def test_a_decisao_guarda_o_total_com_as_pecas_que_o_cliente_viu(self):
         self.dono_c.post(f"/veiculos/{self.vid}/servicos/{self.sid1}/peca",
-                         data={"situacao": "OFICINA_COMPRA", "preco": "90,00"})
+                         data={"situacao": "OFICINA_COMPRA", "preco": "90,00", "peca_nome": "DISCO"})
         self.decidir("APROVADO")
         total = self.sql("SELECT total_centavos FROM aprovacoes")[0]["total_centavos"]
         self.assertEqual(total, 15000 + 25050 + 9000)
@@ -114,3 +121,18 @@ class PrazoAntesDoReparoTest(AprovacaoBase):
     def test_prazo_aparece_antes_da_etapa_na_tela(self):
         pagina = self.func.get(f"/veiculos/{self.vid}").data.decode()
         self.assertLess(pagina.index("Prazo de entrega</h2>"), pagina.index("Etapa do serviço</h2>"))
+
+
+class PecaCompradaNoComprovanteTest(EntregaBase):
+    def test_a_peca_comprada_pela_oficina_aparece_com_o_nome_no_comprovante(self):
+        self.dono_c.post(f"/veiculos/{self.vid}/servicos/{self.sid1}/peca",
+                         data={"situacao": "OFICINA_COMPRA", "preco": "35,00", "peca_nome": "DISCO DE FREIO DIANTEIRO"})
+        self.dono_c.post(f"/veiculos/{self.vid}/servicos/{self.sid1}/peca/maos", data={"em_maos": "1"})
+        self.aprovar()                      # o preço da peça mudou o orçamento: o cliente aprova de novo
+        self.garantias_ok()
+        self.assertEqual(self.fechar().status_code, 302)
+        comprovante = self.dono_c.get(f"/veiculos/{self.vid}/comprovante").data.decode()
+        self.assertIn("1x DISCO DE FREIO DIANTEIRO", comprovante)
+        self.assertIn("R$ 35,00", comprovante)
+        ficha = self.dono_c.get(f"/veiculos/{self.vid}").data.decode()
+        self.assertIn("1x DISCO DE FREIO DIANTEIRO", ficha)

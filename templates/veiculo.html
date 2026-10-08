@@ -269,6 +269,8 @@
                             <option value="{{ chave }}" {{ 'selected' if s['peca_situacao'] == chave }}>{{ texto }}</option>
                             {% endfor %}
                         </select>
+                        <input type="text" name="peca_nome" maxlength="{{ max_nome_peca }}" placeholder="Qual peça? (ex.: disco de freio dianteiro)"
+                               aria-label="Qual peça a oficina compra" value="{{ s['peca_compra_nome'] or '' }}">
                         <input type="text" name="preco" inputmode="decimal" placeholder="Preço da peça, se a oficina comprar (0,00)"
                                aria-label="Preço da peça" value="{{ formatar_dinheiro(s['peca_compra_centavos'], false) if s['peca_compra_centavos'] else '' }}">
                         <span class="aviso">Se a oficina comprar, o preço soma no orçamento e o cliente precisa aprovar de novo.</span>
@@ -333,7 +335,11 @@
                     </form>
                     {% endif %}
                 </div>
-                {% else %}-{% endfor %}
+                {% else %}{% if s['peca_situacao'] != 'OFICINA_COMPRA' %}-{% endif %}{% endfor %}
+                {% if s['peca_situacao'] == 'OFICINA_COMPRA' %}
+                <div class="peca-usada">1x {{ s['peca_compra_nome'] or 'Peça comprada pela oficina' }} - {{ formatar_dinheiro(s['peca_compra_centavos']) }}
+                    <small>(comprada pela oficina)</small></div>
+                {% endif %}
                 {% if s['pecas_centavos'] %}<strong>Peças: {{ formatar_dinheiro(s['pecas_centavos']) }}</strong>{% endif %}
                 {% if not entrega %}
                 {% if itens_estoque %}

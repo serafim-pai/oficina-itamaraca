@@ -73,6 +73,7 @@ SITUACOES_PECA = {
     "CLIENTE_TRAZ": "O cliente traz a peça",
     "OFICINA_COMPRA": "A oficina compra a peça",
 }
+MAX_NOME_PECA_COMPRA = 80          # letras do nome da peça que a oficina compra
 MAX_REFERENCIA = 300                 # letras da anotação "número original / onde comprar"
 # Sites onde a pesquisa de peça é aberta (em outra aba). {q} é o texto da pesquisa já codificado.
 SITES_BUSCA = {
@@ -471,6 +472,8 @@ def init_db():
         db.execute("ALTER TABLE servicos ADD COLUMN peca_compra_centavos INTEGER NOT NULL DEFAULT 0")
     if "peca_em_maos" not in colunas:
         db.execute("ALTER TABLE servicos ADD COLUMN peca_em_maos INTEGER NOT NULL DEFAULT 0")
+    if "peca_compra_nome" not in colunas:
+        db.execute("ALTER TABLE servicos ADD COLUMN peca_compra_nome TEXT")
     # Peça de referência de cada serviço: número original e onde comprar (só anotação, não entra no orçamento)
     if "referencia_peca" not in colunas:
         db.execute("ALTER TABLE servicos ADD COLUMN referencia_peca TEXT")
@@ -1450,7 +1453,7 @@ def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False):
         for p in db.execute("SELECT ep.* FROM entrega_pecas ep JOIN entrega_itens ei "
                             "ON ei.id = ep.entrega_item_id WHERE ei.entrega_id = ? ORDER BY ep.id", (entrega["id"],)):
             pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
-    return render_template("veiculo.html", max_dado_veiculo=MAX_DADO_VEICULO, situacoes_peca=SITUACOES_PECA,
+    return render_template("veiculo.html", max_dado_veiculo=MAX_DADO_VEICULO, max_nome_peca=MAX_NOME_PECA_COMPRA, situacoes_peca=SITUACOES_PECA,
                            faltam_pecas=faltam_pecas, sites_busca=SITES_BUSCA, max_peca_busca=MAX_PECA_BUSCA,
                            max_referencia=MAX_REFERENCIA, pecas_servicos=pecas_servicos, itens_estoque=itens_estoque,
                            grupos_estoque=grupos_estoque,
@@ -1652,13 +1655,19 @@ def registrar_peca_origem(id, servico_id):
     if situacao and situacao not in SITUACOES_PECA:
         return pagina_veiculo(id, ["Escolha quem fornece a peça."])
     preco = 0
+    nome = ""
     if situacao == "OFICINA_COMPRA":
+        nome = " ".join(request.form.get("peca_nome", "").split())
+        if not nome or len(nome) > MAX_NOME_PECA_COMPRA:
+            return pagina_veiculo(id, [f"Diga qual peça a oficina vai comprar (até {MAX_NOME_PECA_COMPRA} letras). "
+                                       "Ela aparece no comprovante do cliente."])
         preco = interpretar_valor(request.form.get("preco", ""))
         if preco is None:
             return pagina_veiculo(id, ["Informe o preço da peça que a oficina vai comprar (exemplo: 120,00)."])
     mudou = (servico["peca_situacao"] or "") != situacao
-    db.execute("UPDATE servicos SET peca_situacao = ?, peca_compra_centavos = ?, peca_em_maos = ? WHERE id = ?",
-               (situacao or None, preco, 0 if mudou else servico["peca_em_maos"], servico_id))
+    db.execute("UPDATE servicos SET peca_situacao = ?, peca_compra_centavos = ?, peca_em_maos = ?, "
+               "peca_compra_nome = ? WHERE id = ?",
+               (situacao or None, preco, 0 if mudou else servico["peca_em_maos"], nome or None, servico_id))
     recalcular_pecas(db, servico_id)
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
@@ -1984,6 +1993,11 @@ def fechar_entrega(id):
             db.execute("INSERT INTO entrega_pecas (entrega_item_id, nome, quantidade, preco_centavos) "
                        "SELECT ?, nome, quantidade, preco_centavos FROM servico_pecas WHERE servico_id = ? ORDER BY id",
                        (item.lastrowid, s["id"]))
+            if s["peca_situacao"] == "OFICINA_COMPRA":       # a peça que a oficina comprou aparece no comprovante
+                db.execute("INSERT INTO entrega_pecas (entrega_item_id, nome, quantidade, preco_centavos) "
+                           "VALUES (?, ?, 1, ?)",
+                           (item.lastrowid, s["peca_compra_nome"] or "Peça comprada pela oficina",
+                            s["peca_compra_centavos"]))
         guardar_fotos(db, id, fotos_entrega, criados, momento="ENTREGA")
         db.commit()
     except sqlite3.IntegrityError:      # dois cliques ao mesmo tempo: só um fecha a entrega
