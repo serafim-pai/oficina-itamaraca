@@ -32,7 +32,15 @@
             <tr><th>Serviço</th><th>O que foi feito</th><th>Valor</th><th>Garantia</th><th>Garantia válida até</th></tr>
             {% for i in itens %}
             <tr>
-                <td><strong>{{ i['tipo'] }}</strong><br>{{ i['problema'] }}</td>
+                <td><strong>{{ i['tipo'] }}</strong><br>{{ i['problema'] }}
+                    {% if fotos_problema.get(i['servico_id']) %}
+                    <div class="fotos-problema-comprovante">
+                        {% for foto_id in fotos_problema[i['servico_id']] %}
+                        <img src="{{ url_for('foto_miniatura', id=foto_id) }}" alt="Foto do problema: {{ i['tipo'] }}">
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </td>
                 <td>{{ i['como_resolver'] or '-' }}
                     {% for p in pecas_entrega.get(i['id'], []) %}
                     <br><small>{{ p['quantidade'] }}x {{ p['nome'] }} ({{ formatar_dinheiro(p['quantidade'] * p['preco_centavos']) }})</small>

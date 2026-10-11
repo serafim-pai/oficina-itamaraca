@@ -2026,11 +2026,14 @@ def comprovante(id):
     aprovacao = db.execute("SELECT * FROM aprovacoes WHERE veiculo_id = ? ORDER BY id DESC LIMIT 1", (id,)).fetchone()
     fotos_entrega = [f["id"] for f in db.execute(
         "SELECT id FROM fotos WHERE veiculo_id = ? AND momento = 'ENTREGA' ORDER BY id", (id,))]
+    fotos_problema = {}
+    for f in db.execute("SELECT id, servico_id FROM fotos WHERE veiculo_id = ? AND momento = 'PROBLEMA' ORDER BY id", (id,)):
+        fotos_problema.setdefault(f["servico_id"], []).append(f["id"])
     pecas_entrega = {}
     for p in db.execute("SELECT ep.* FROM entrega_pecas ep JOIN entrega_itens ei ON ei.id = ep.entrega_item_id "
                         "WHERE ei.entrega_id = ? ORDER BY ep.id", (entrega["id"],)):
         pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
-    return render_template("comprovante.html", pecas_entrega=pecas_entrega, veiculo=veiculo, entrega=entrega, itens=itens, aprovacao=aprovacao,
+    return render_template("comprovante.html", pecas_entrega=pecas_entrega, fotos_problema=fotos_problema, veiculo=veiculo, entrega=entrega, itens=itens, aprovacao=aprovacao,
                            fotos_entrega=fotos_entrega,
                            formatar_data=formatar_data, formatar_dinheiro=formatar_dinheiro,
                            texto_garantia=texto_garantia, nomes_formas=NOMES_FORMAS_APROVACAO)

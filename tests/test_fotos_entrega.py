@@ -301,6 +301,23 @@ class ComprovanteComFotosTest(Base):
             self.assertNotIn(f"/fotos/{f['id']}/miniatura", pagina)
         self.assertEqual(pagina.count('class="fotos-comprovante"'), 1)
 
+    def test_o_comprovante_mostra_as_fotos_do_problema_no_servico_certo(self):
+        self.func.post(f"/veiculos/{self.vid}/servicos/{self.sid}/fotos", content_type="multipart/form-data",
+                       data={"fotos": [foto("p1.jpg"), foto("p2.jpg")]})
+        self.fechar()
+        pagina = self.dono_c.get(f"/veiculos/{self.vid}/comprovante").data.decode()
+        do_problema = self.sql("SELECT id FROM fotos WHERE momento = 'PROBLEMA'")
+        self.assertEqual(len(do_problema), 2)
+        self.assertEqual(pagina.count('class="fotos-problema-comprovante"'), 1)
+        for f in do_problema:
+            self.assertIn(f"/fotos/{f['id']}/miniatura", pagina)
+        self.assertLess(pagina.index("Amassado na porta"), pagina.index('class="fotos-problema-comprovante"'))
+
+    def test_sem_foto_do_problema_o_comprovante_nao_mostra_o_bloco(self):
+        self.fechar()
+        pagina = self.dono_c.get(f"/veiculos/{self.vid}/comprovante").data.decode()
+        self.assertNotIn('class="fotos-problema-comprovante"', pagina)
+
     def test_a_ordem_do_comprovante_continua_a_mesma(self):
         self.fechar()
         pagina = self.dono_c.get(f"/veiculos/{self.vid}/comprovante").data.decode()
