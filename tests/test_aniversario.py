@@ -99,6 +99,12 @@ class AniversarioNosAvisosTest(Base):
         self.assertIn("vale%20at%C3%A9%2031/10/2026", pagina)
         self.assertIn("brinde: revisão geral, alinhamento e balanceamento grátis", pagina)
 
+    def test_mensagens_de_whatsapp_nao_levam_emoji(self):
+        """O WhatsApp Web estraga emoji vindo por link (aparece como "?"); por isso a mensagem vai só com texto."""
+        self.definir("1985-10-20", telefone="81987654321")
+        for link in [l for l in self.lista().split('href="') if l.startswith("https://wa.me/")]:
+            self.assertNotIn("%F0%9F", link.split('"')[0])
+
     def test_texto_da_garantia_nao_promete_diagnostico_gratis(self):
         self.fechar()
         self.sql("UPDATE entrega_itens SET garantia_ate = '2026-10-25'")
