@@ -298,3 +298,10 @@ input[name="responsavel"], input[name="placa"], input[name="marca"], input[name=
 
 /* Espaço entre os botões de etapa e o histórico das etapas */
 .historico-etapas { margin-top: 14px; }
+
+.passagens { background: #f4f6fa; border: 1px solid #c9d3e3; border-radius: 6px; padding: 8px 12px; margin: 10px 0; }
+.passagens summary { cursor: pointer; font-weight: bold; }
+.passagens .passagem { border-top: 1px solid #d9e0ec; margin-top: 8px; padding-top: 6px; }
+.passagens .passagem p { margin: 4px 0; }
+.passagens .passagem ul { margin: 4px 0 4px 18px; padding: 0; }
+.passagens .pequeno { color: #1e6b34; font-size: 13px; }

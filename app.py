@@ -1410,6 +1410,30 @@ def buscar_veiculo(db, id):
     return veiculo
 
 
+def passagens_anteriores(db, veiculo, hoje):
+    """Outras fichas do mesmo carro (mesma placa, sem contar maiúscula, espaço ou hífen), da mais nova para a
+    mais antiga. Cada uma traz os serviços, a situação (entregue ou em andamento), o total e a garantia vigente."""
+    placa = normalizar(veiculo["placa"])
+    passagens = []
+    for outro in db.execute("SELECT * FROM veiculos WHERE id != ? ORDER BY id DESC", (veiculo["id"],)):
+        if normalizar(outro["placa"]) != placa:
+            continue
+        servicos = db.execute("SELECT * FROM servicos WHERE veiculo_id = ? ORDER BY id", (outro["id"],)).fetchall()
+        entrega = db.execute("SELECT * FROM entregas WHERE veiculo_id = ?", (outro["id"],)).fetchone()
+        garantias = []
+        if entrega:
+            for i in db.execute("SELECT * FROM entrega_itens WHERE entrega_id = ? ORDER BY id", (entrega["id"],)):
+                if situacao_garantia(i["garantia_ate"], hoje)[0] == "VIGENTE":
+                    garantias.append(i)
+        passagens.append({
+            "veiculo": outro, "servicos": servicos, "entrega": entrega, "garantias": garantias,
+            "total_centavos": (entrega["total_centavos"] if entrega else
+                               sum((s["valor_centavos"] or 0) + s["pecas_centavos"] for s in servicos)),
+            "data": servicos[0]["criado_em"] if servicos else None,
+        })
+    return passagens
+
+
 def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False):
     db = get_db()
     veiculo = buscar_veiculo(db, id)
@@ -1454,7 +1478,7 @@ def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False):
         for p in db.execute("SELECT ep.* FROM entrega_pecas ep JOIN entrega_itens ei "
                             "ON ei.id = ep.entrega_item_id WHERE ei.entrega_id = ? ORDER BY ep.id", (entrega["id"],)):
             pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
-    return render_template("veiculo.html", max_dado_veiculo=MAX_DADO_VEICULO, max_nome_peca=MAX_NOME_PECA_COMPRA, situacoes_peca=SITUACOES_PECA,
+    return render_template("veiculo.html", passagens=passagens_anteriores(db, veiculo, hoje), max_dado_veiculo=MAX_DADO_VEICULO, max_nome_peca=MAX_NOME_PECA_COMPRA, situacoes_peca=SITUACOES_PECA,
                            faltam_pecas=faltam_pecas, sites_busca=SITES_BUSCA, max_peca_busca=MAX_PECA_BUSCA,
                            max_referencia=MAX_REFERENCIA, pecas_servicos=pecas_servicos, itens_estoque=itens_estoque,
                            grupos_estoque=grupos_estoque,

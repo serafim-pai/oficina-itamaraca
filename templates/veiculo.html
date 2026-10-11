@@ -34,6 +34,28 @@
             <button type="submit">Salvar</button>
         </form>
     </details>
+    {% if passagens %}
+    <details class="passagens" {{ 'open' if passagens|selectattr('garantias')|list }}>
+        <summary>🕘 Passagens anteriores deste carro ({{ passagens|length }})
+            {% if passagens|selectattr('garantias')|list %}<span class="selo selo-aprovado">tem garantia vigente</span>{% endif %}</summary>
+        {% for p in passagens %}
+        <div class="passagem">
+            <p><strong>{{ p['data']|hora_brasil if p['data'] else 'Sem serviços registrados' }}</strong>
+               &nbsp; {% if p['entrega'] %}<span class="selo selo-entregue">Entregue em {{ formatar_data(p['entrega']['data_entrega']) }}</span>
+               {% else %}<span class="selo">Em andamento</span>{% endif %}
+               &nbsp; {{ formatar_dinheiro(p['total_centavos']) }}
+               &nbsp; <a href="{{ url_for('ver_veiculo', id=p['veiculo']['id']) }}">Abrir a ficha</a>
+               {% if p['entrega'] %}&nbsp; <a href="{{ url_for('comprovante', id=p['veiculo']['id']) }}">Comprovante</a>{% endif %}</p>
+            <ul>
+                {% for s in p['servicos'] %}<li>{{ s['tipo'] }}: {{ s['problema'] }}</li>{% endfor %}
+            </ul>
+            {% for g in p['garantias'] %}
+            <p class="pequeno">✔ Garantia vigente: {{ g['tipo'] }}, até {{ formatar_data(g['garantia_ate']) }}</p>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </details>
+    {% endif %}
     {% if not entrega %}
     {% if not entrega and not veiculo['motor'] %}
     <div class="aviso-custo">⚠️ Informe o <strong>motor</strong> do veículo (cilindrada e potência, exemplo: 1.8 8v 99cv).
