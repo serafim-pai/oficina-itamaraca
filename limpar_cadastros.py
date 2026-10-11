@@ -6,8 +6,8 @@ Uso (na pasta do projeto):
     python limpar_cadastros.py --executar   apaga de verdade, depois de você digitar a frase de confirmação
 
 Antes de apagar, a ferramenta faz uma cópia do banco e MOVE a pasta de fotos para uma pasta de backup
-(nada é perdido de imediato). Ela MANTÉM: usuários e senhas, limites de garantia, estoque (itens e quantidades)
-e profissionais (comissão). O histórico do estoque fica, mas sem ligação com os veículos apagados.
+(nada é perdido de imediato). Ela APAGA os veículos e tudo que é deles, o estoque (itens, carros em que servem e
+movimentos) e os profissionais (comissão). Ela MANTÉM: usuários e senhas e os limites de garantia.
 """
 import os
 import shutil
@@ -20,12 +20,12 @@ BANCO = os.environ.get("OFICINA_DB") or os.path.join(PASTA_DO_SISTEMA, "oficina.
 PASTA_FOTOS = os.environ.get("OFICINA_FOTOS") or os.path.join(PASTA_DO_SISTEMA, "fotos")
 FRASE = "APAGAR TUDO"
 
-# Tabelas que são apagadas por inteiro (tudo que pertence aos veículos), da mais dependente para a menos
+# Tabelas que são apagadas por inteiro: tudo dos veículos, o estoque e os profissionais
 APAGAR = ("fotos_historico", "fotos", "entrega_pecas", "entrega_itens", "entregas", "entrega_itens_desfeitos",
           "entregas_desfeitas", "servico_pecas", "pagamentos", "aprovacoes", "prazos", "etapas", "arquivamentos",
-          "avisos", "servicos", "veiculos_excluidos", "veiculos")
-MANTER = ("usuarios", "tentativas_login", "limites_garantia", "estoque_itens", "estoque_aplicacoes",
-          "estoque_movimentos", "profissionais")
+          "avisos", "servicos", "veiculos_excluidos", "veiculos", "estoque_movimentos", "estoque_aplicacoes",
+          "estoque_itens", "profissionais")
+MANTER = ("usuarios", "tentativas_login", "limites_garantia")
 
 
 def tabelas_existentes(banco):
@@ -41,14 +41,12 @@ def contar(banco):
 
 
 def limpar_banco(banco):
-    """Apaga tudo dos veículos numa transação só (ou tudo, ou nada). O estoque perde só a ligação com os veículos."""
+    """Apaga tudo dos veículos, do estoque e dos profissionais numa transação só (ou tudo, ou nada)."""
     existentes = tabelas_existentes(banco)
     try:
         for tabela in APAGAR:
             if tabela in existentes:
                 banco.execute(f"DELETE FROM {tabela}")
-        if "estoque_movimentos" in existentes:
-            banco.execute("UPDATE estoque_movimentos SET veiculo_id = NULL, servico_id = NULL")
         if "sqlite_sequence" in existentes:          # os números das fichas voltam a começar do 1
             marcas = ",".join("?" * len(APAGAR))
             banco.execute(f"DELETE FROM sqlite_sequence WHERE name IN ({marcas})", APAGAR)

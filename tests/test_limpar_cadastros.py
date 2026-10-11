@@ -67,21 +67,30 @@ class LimparCadastrosTest(Base):
         self.assertTrue(os.listdir(self.fotos))
         self.assertEqual([n for n in os.listdir(self.pasta) if "antes-da-limpeza" in n], [])
 
-    def test_executar_apaga_os_cadastros_e_mantem_o_resto(self):
+    def test_executar_apaga_cadastros_estoque_e_profissionais_e_mantem_usuarios_e_garantia(self):
+        self.sql("INSERT INTO limites_garantia (tipo, meses) VALUES ('LATARIA', 6)")
+        self.sql("INSERT INTO estoque_aplicacoes (item_id, marca, modelo) VALUES (1, 'FIAT', 'UNO')")
+        with closing(sqlite3.connect(oficina.DATABASE)) as de, closing(sqlite3.connect(self.banco)) as para:
+            de.backup(para)
         codigo, texto = self.rodar(["--executar"], resposta="APAGAR TUDO")
         self.assertEqual(codigo, 0)
         for tabela in ferramenta.APAGAR:
             self.assertEqual(self.contar(tabela), 0, tabela)
+        for tabela in ("estoque_itens", "estoque_movimentos", "estoque_aplicacoes", "profissionais", "veiculos"):
+            self.assertEqual(self.contar(tabela), 0, tabela)
         self.assertEqual(self.contar("usuarios"), 2)
-        self.assertEqual(self.contar("estoque_itens"), 1)
-        self.assertEqual(self.contar("profissionais"), 1)
-        with closing(sqlite3.connect(self.banco)) as b:
-            b.row_factory = sqlite3.Row
-            movimento = b.execute("SELECT * FROM estoque_movimentos").fetchone()
-            self.assertIsNone(movimento["veiculo_id"])
-            self.assertIsNone(movimento["servico_id"])
-            self.assertEqual(b.execute("SELECT quantidade FROM estoque_itens").fetchone()[0], 5)
+        self.assertEqual(self.contar("limites_garantia"), 1)
         self.assertIn("Pronto", texto)
+
+    def test_o_que_sera_mantido_aparece_na_previa(self):
+        _, texto = self.rodar([])
+        antes_do_mantido = texto.split("Isto será MANTIDO:")[0]
+        depois = texto.split("Isto será MANTIDO:")[1]
+        for tabela in ("estoque_itens", "profissionais", "veiculos"):
+            self.assertIn(tabela, antes_do_mantido)
+            self.assertNotIn(tabela, depois)
+        for tabela in ("usuarios", "limites_garantia"):
+            self.assertIn(tabela, depois)
 
     def test_guarda_copia_do_banco_e_move_as_fotos(self):
         fotos_antes = sorted(os.listdir(self.fotos))
