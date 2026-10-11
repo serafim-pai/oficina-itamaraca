@@ -1877,6 +1877,82 @@ def registrar_garantia(id, servico_id):
     return redirect(url_for("ver_veiculo", id=id))
 
 
+MESES_EXTENSO = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
+                 "outubro", "novembro", "dezembro")
+DIAS_AVISO_GARANTIA = 30             # garantias que vencem nesse prazo aparecem no relatório
+
+
+def interpretar_mes(texto, hoje):
+    """'2026-10' vira (2026, 10). Texto vazio ou inválido vira o mês de hoje."""
+    try:
+        ano, mes = (int(parte) for parte in (texto or "").split("-"))
+        if 2000 <= ano <= 2100 and 1 <= mes <= 12:
+            return ano, mes
+    except ValueError:
+        pass
+    return hoje.year, hoje.month
+
+
+def montar_relatorio(db, ano, mes, hoje):
+    """Números do mês (carros ENTREGUES no mês) e das garantias de hoje. Tudo em centavos."""
+    prefixo = f"{ano:04d}-{mes:02d}-"
+    entregas = db.execute("SELECT * FROM entregas WHERE data_entrega LIKE ? ORDER BY data_entrega, id",
+                          (prefixo + "%",)).fetchall()
+    ids = [e["id"] for e in entregas]
+    marcas = ",".join("?" * len(ids))
+    total = sum(e["total_centavos"] for e in entregas)
+    por_tipo, servicos_centavos, pecas_centavos = {}, 0, 0
+    if ids:
+        for i in db.execute(f"SELECT * FROM entrega_itens WHERE entrega_id IN ({marcas})", ids):
+            linha = por_tipo.setdefault(i["tipo"], {"tipo": i["tipo"], "quantidade": 0, "centavos": 0})
+            linha["quantidade"] += 1
+            linha["centavos"] += i["valor_centavos"] + i["pecas_centavos"]
+            servicos_centavos += i["valor_centavos"]
+            pecas_centavos += i["pecas_centavos"]
+    pecas_estoque, venda, custo = {}, 0, 0
+    if ids:
+        for p in db.execute(f"SELECT sp.* FROM servico_pecas sp JOIN entregas e ON e.veiculo_id = sp.veiculo_id "
+                            f"WHERE e.id IN ({marcas}) ORDER BY sp.id", ids):
+            linha = pecas_estoque.setdefault(p["nome"], {"nome": p["nome"], "quantidade": 0, "venda": 0, "custo": 0})
+            linha["quantidade"] += p["quantidade"]
+            linha["venda"] += p["quantidade"] * p["preco_centavos"]
+            linha["custo"] += p["quantidade"] * p["custo_centavos"]
+            venda += p["quantidade"] * p["preco_centavos"]
+            custo += p["quantidade"] * p["custo_centavos"]
+    limite = (hoje + timedelta(days=DIAS_AVISO_GARANTIA)).isoformat()
+    vigentes, vencendo = 0, []
+    for i in db.execute("SELECT i.*, e.veiculo_id, v.placa FROM entrega_itens i JOIN entregas e ON e.id = i.entrega_id "
+                        "JOIN veiculos v ON v.id = e.veiculo_id WHERE i.garantia_ate IS NOT NULL "
+                        "AND i.garantia_ate >= ? ORDER BY i.garantia_ate, i.id", (hoje.isoformat(),)):
+        vigentes += 1
+        if i["garantia_ate"] <= limite:
+            vencendo.append(i)
+    return {
+        "entregues": len(entregas), "total": total, "media": (total // len(entregas)) if entregas else 0,
+        "servicos": servicos_centavos, "pecas": pecas_centavos,
+        "por_tipo": sorted(por_tipo.values(), key=lambda l: (-l["centavos"], l["tipo"])),
+        "pecas_estoque": sorted(pecas_estoque.values(), key=lambda l: (-l["venda"], l["nome"])),
+        "pecas_venda": venda, "pecas_custo": custo, "pecas_lucro": venda - custo,
+        "garantias_vigentes": vigentes, "garantias_vencendo": vencendo,
+    }
+
+
+@app.route("/relatorio")
+def relatorio():
+    """Relatório do mês, só para o dono: faturamento, serviços por tipo, peças do estoque e garantias."""
+    so_dono()
+    db = get_db()
+    hoje = hoje_brasil()
+    ano, mes = interpretar_mes(request.args.get("mes"), hoje)
+    anterior = (ano - 1, 12) if mes == 1 else (ano, mes - 1)
+    seguinte = (ano + 1, 1) if mes == 12 else (ano, mes + 1)
+    return render_template("relatorio.html", dados=montar_relatorio(db, ano, mes, hoje),
+                           mes_texto=f"{MESES_EXTENSO[mes - 1]} de {ano}", mes_valor=f"{ano:04d}-{mes:02d}",
+                           anterior=f"{anterior[0]:04d}-{anterior[1]:02d}", seguinte=f"{seguinte[0]:04d}-{seguinte[1]:02d}",
+                           mes_atual=f"{hoje.year:04d}-{hoje.month:02d}", dias_aviso=DIAS_AVISO_GARANTIA,
+                           formatar_data=formatar_data, formatar_dinheiro=formatar_dinheiro)
+
+
 @app.route("/limites-garantia", methods=["GET", "POST"])
 def limites_garantia():
     """O dono ajusta o limite máximo de garantia (em meses) de cada tipo de serviço.

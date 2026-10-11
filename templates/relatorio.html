@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relatório - Oficina Itamaracá</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+    <div class="nao-imprimir">{% include '_menu.html' %}</div>
+    <h1>Relatório de {{ mes_texto }}</h1>
+    <p class="nao-imprimir navegacao-mes">
+        <a href="{{ url_for('relatorio', mes=anterior) }}">&larr; Mês anterior</a>
+        <a href="{{ url_for('relatorio', mes=seguinte) }}">Mês seguinte &rarr;</a>
+        {% if mes_valor != mes_atual %}<a href="{{ url_for('relatorio') }}">Este mês</a>{% endif %}
+        <button type="button" onclick="window.print()">🖨️ Imprimir</button>
+    </p>
+    <p class="pequeno">Conta os carros <strong>entregues</strong> neste mês (pela data da entrega).</p>
+
+    <h2>Faturamento</h2>
+    {% if dados['entregues'] %}
+    <table class="relatorio">
+        <tr><th>Carros entregues</th><td class="num">{{ dados['entregues'] }}</td></tr>
+        <tr><th>Total faturado</th><td class="num"><strong>{{ formatar_dinheiro(dados['total']) }}</strong></td></tr>
+        <tr><th>Valor médio por carro</th><td class="num">{{ formatar_dinheiro(dados['media']) }}</td></tr>
+        <tr><th>Parte dos serviços</th><td class="num">{{ formatar_dinheiro(dados['servicos']) }}</td></tr>
+        <tr><th>Parte das peças</th><td class="num">{{ formatar_dinheiro(dados['pecas']) }}</td></tr>
+    </table>
+
+    <h2>Serviços por tipo</h2>
+    <table class="relatorio">
+        <tr><th>Tipo</th><th class="num">Serviços</th><th class="num">Valor</th></tr>
+        {% for l in dados['por_tipo'] %}
+        <tr><td>{{ l['tipo'] }}</td><td class="num">{{ l['quantidade'] }}</td><td class="num">{{ formatar_dinheiro(l['centavos']) }}</td></tr>
+        {% endfor %}
+    </table>
+
+    <h2>Peças e tintas do estoque</h2>
+    {% if dados['pecas_estoque'] %}
+    <table class="relatorio">
+        <tr><th>Item</th><th class="num">Quant.</th><th class="num">Custo</th><th class="num">Venda</th><th class="num">Lucro</th></tr>
+        {% for l in dados['pecas_estoque'] %}
+        <tr><td>{{ l['nome'] }}</td><td class="num">{{ l['quantidade'] }}</td>
+            <td class="num">{{ formatar_dinheiro(l['custo']) }}</td><td class="num">{{ formatar_dinheiro(l['venda']) }}</td>
+            <td class="num">{{ formatar_dinheiro(l['venda'] - l['custo']) }}</td></tr>
+        {% endfor %}
+        <tr class="total"><td colspan="2">Total</td><td class="num">{{ formatar_dinheiro(dados['pecas_custo']) }}</td>
+            <td class="num">{{ formatar_dinheiro(dados['pecas_venda']) }}</td><td class="num">{{ formatar_dinheiro(dados['pecas_lucro']) }}</td></tr>
+    </table>
+    <p class="pequeno">Só peças tiradas do estoque. Peça comprada pela oficina e material incluso no valor do serviço não entram aqui.</p>
+    {% else %}
+    <p>Nenhuma peça do estoque foi usada nos carros entregues neste mês.</p>
+    {% endif %}
+    {% else %}
+    <p>Nenhum carro foi entregue neste mês.</p>
+    {% endif %}
+
+    <h2>Garantias (hoje)</h2>
+    <p><strong>{{ dados['garantias_vigentes'] }}</strong> {{ 'garantia vigente' if dados['garantias_vigentes'] == 1 else 'garantias vigentes' }}.
+       {% if dados['garantias_vencendo'] %}Vencem nos próximos {{ dias_aviso }} dias:{% else %}Nenhuma vence nos próximos {{ dias_aviso }} dias.{% endif %}</p>
+    {% if dados['garantias_vencendo'] %}
+    <table class="relatorio">
+        <tr><th>Placa</th><th>Serviço</th><th>Vence em</th></tr>
+        {% for g in dados['garantias_vencendo'] %}
+        <tr><td><a href="{{ url_for('ver_veiculo', id=g['veiculo_id']) }}">{{ g['placa'] }}</a></td>
+            <td>{{ g['tipo'] }}: {{ g['problema'] }}</td><td>{{ formatar_data(g['garantia_ate']) }}</td></tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+</body>
+</html>

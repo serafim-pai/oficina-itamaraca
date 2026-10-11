@@ -305,3 +305,9 @@ input[name="responsavel"], input[name="placa"], input[name="marca"], input[name=
 .passagens .passagem p { margin: 4px 0; }
 .passagens .passagem ul { margin: 4px 0 4px 18px; padding: 0; }
 .passagens .pequeno { color: #1e6b34; font-size: 13px; }
+
+.navegacao-mes a { margin-right: 14px; }
+table.relatorio { margin: 6px 0 10px; }
+table.relatorio th { background: #eef2f8; color: #1a3c6e; text-align: left; }
+table.relatorio td.num, table.relatorio th.num { text-align: right; white-space: nowrap; }
+table.relatorio tr.total td { font-weight: bold; background: #eef2f8; }
