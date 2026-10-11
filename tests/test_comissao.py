@@ -53,16 +53,31 @@ class ProfissionaisTest(ComissaoBase):
         ficha = self.pagina(cliente=self.func)
         self.assertNotIn("Executado por", ficha)
         self.assertNotIn("/comissoes", ficha)
+        self.assertNotIn("/profissionais", ficha)
 
-    def test_dono_ve_menu_e_cadastra(self):
-        self.assertIn("/comissoes", self.pagina())
+    def test_dono_ve_menu_e_cadastra_com_o_nome_em_maiusculas(self):
+        pagina_inicial = self.pagina()
+        self.assertIn("👷 Profissionais", pagina_inicial)
+        self.assertNotIn("👷 Comissões", pagina_inicial)
         resposta = self.dono_c.post("/profissionais", data={"nome": "  Carlos   Silva ", "percentual": "12,5"})
         self.assertEqual(resposta.status_code, 302)
         p = self.sql("SELECT * FROM profissionais")[0]
-        self.assertEqual((p["nome"], p["percentual_bp"], p["ativo"]), ("Carlos Silva", 1250, 1))
+        self.assertEqual((p["nome"], p["percentual_bp"], p["ativo"]), ("CARLOS SILVA", 1250, 1))
         pagina = self.dono_c.get("/profissionais").data.decode()
-        self.assertIn("Carlos Silva", pagina)
+        self.assertIn("CARLOS SILVA", pagina)
         self.assertIn('value="12,5"', pagina)
+        self.assertIn("Ver as comissões do mês", pagina)
+
+    def test_editar_tambem_deixa_o_nome_em_maiusculas(self):
+        pid = self.novo_profissional("CARLOS", "30")
+        self.dono_c.post(f"/profissionais/{pid}/editar", data={"nome": "carlos alberto", "percentual": "30"})
+        self.assertEqual(self.sql("SELECT nome FROM profissionais")[0]["nome"], "CARLOS ALBERTO")
+
+    def test_nome_em_minusculas_que_ja_existia_vira_maiusculas_ao_iniciar(self):
+        self.sql("INSERT INTO profissionais (nome, percentual_bp) VALUES ('mecânico modelo', 3000)")
+        with oficina.app.app_context():
+            oficina.init_db()
+        self.assertEqual(self.sql("SELECT nome FROM profissionais")[0]["nome"], "MECÂNICO MODELO")
 
     def test_cadastro_invalido(self):
         self.novo_profissional("CARLOS")

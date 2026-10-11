@@ -420,6 +420,9 @@ def init_db():
         )
         """
     )
+    for pessoa_id, pessoa_nome in db.execute("SELECT id, nome FROM profissionais").fetchall():
+        if pessoa_nome != pessoa_nome.upper():
+            db.execute("UPDATE profissionais SET nome = ? WHERE id = ?", (pessoa_nome.upper(), pessoa_id))
     # História 9: estoque de peças e tintas. Cada item guarda quantidade (inteira), mínimo para o aviso de estoque
     # baixo, custo e preço de venda (em centavos). Toda mudança de quantidade vira uma linha em
     # estoque_movimentos (nunca apagada): quem, quando e por quê.
@@ -2863,7 +2866,7 @@ def profissionais():
     db = get_db()
     erros, dados = [], {}
     if request.method == "POST":
-        nome = " ".join(request.form.get("nome", "").split())
+        nome = " ".join(request.form.get("nome", "").split()).upper()
         bp = interpretar_percentual(request.form.get("percentual", ""))
         dados = {"nome": nome, "percentual": request.form.get("percentual", "")}
         if not nome:
@@ -2891,7 +2894,7 @@ def editar_profissional(id):
     atual = db.execute("SELECT * FROM profissionais WHERE id = ?", (id,)).fetchone()
     if not atual:
         abort(404)
-    nome = " ".join(request.form.get("nome", "").split())
+    nome = " ".join(request.form.get("nome", "").split()).upper()
     bp = interpretar_percentual(request.form.get("percentual", ""))
     erros = []
     if not nome:

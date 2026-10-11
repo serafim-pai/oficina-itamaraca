@@ -4,7 +4,7 @@
     {% if usuario %}<a href="{{ url_for('avisos') }}">📣 Avisos</a>{% endif %}
     {% if usuario and usuario['tipo'] == 'DONO' %}
     <a href="{{ url_for('a_receber') }}">💰 A receber</a>
-    <a href="{{ url_for('comissoes') }}">👷 Comissões</a>
+    <a href="{{ url_for('profissionais') }}">👷 Profissionais</a>
     <a href="{{ url_for('relatorio') }}">📊 Relatório</a>
     <a href="{{ url_for('limites_garantia') }}">🛡️ Garantia</a>
     <a href="{{ url_for('usuarios') }}">🔐 Usuários</a>

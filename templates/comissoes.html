@@ -13,7 +13,7 @@
         <a href="{{ url_for('comissoes', mes=anterior) }}">&larr; Mês anterior</a>
         <a href="{{ url_for('comissoes', mes=seguinte) }}">Mês seguinte &rarr;</a>
         {% if mes_valor != mes_atual %}<a href="{{ url_for('comissoes') }}">Este mês</a>{% endif %}
-        <a href="{{ url_for('profissionais') }}">👷 Profissionais e percentuais</a>
+        <a href="{{ url_for('profissionais') }}">👷 Cadastro de profissionais e percentuais</a>
         <button type="button" onclick="window.print()">🖨️ Imprimir</button>
     </p>
     <p class="pequeno">Conta os serviços de carros <strong>entregues</strong> neste mês, sobre a mão de obra (sem as peças),
