@@ -1563,7 +1563,7 @@ def passagens_anteriores(db, veiculo, hoje):
     return passagens
 
 
-def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False):
+def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False, destacar_pecas=None):
     db = get_db()
     veiculo = buscar_veiculo(db, id)
     servicos = db.execute("SELECT * FROM servicos WHERE veiculo_id = ? ORDER BY id", (id,)).fetchall()
@@ -1646,6 +1646,7 @@ def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False):
                            formatar_data=formatar_data, max_motivo=MAX_MOTIVO_PRAZO,
                            tipos=TIPOS_SERVICO, max_problema=MAX_PROBLEMA,
                            erros=erros or [], dados=dados or {}, recem_cadastrado=recem_cadastrado,
+                           destacar_pecas=destacar_pecas or [],
                            total_centavos=total_centavos, faltam_valor=faltam,
                            orcamento_completo=orcamento_completo, formatar_dinheiro=formatar_dinheiro,
                            aprovacoes=aprovacoes, situacao=situacao, situacao_texto=situacao_texto,
@@ -2605,12 +2606,11 @@ def registrar_etapa(id):
     elif nova == "EM_REPARO" and atual == "AGUARDANDO_INICIO"             and not db.execute("SELECT 1 FROM prazos WHERE veiculo_id = ?", (id,)).fetchone():
         erros.append("O reparo só pode começar com o prazo de entrega definido. O dono define o prazo em "
                      "\"Prazo de entrega\", acima da etapa.")
-    elif nova == "EM_REPARO" and atual == "AGUARDANDO_INICIO" and pecas_pendentes(servicos):
-        erros.append("O reparo só pode começar com a peça em mãos. Falta a peça de: "
-                     + ", ".join(s["tipo"] for s in pecas_pendentes(servicos))
-                     + ". Marque \"Peça em mãos\" quando ela chegar.")
     if erros:
         return pagina_veiculo(id, erros)
+    if nova == "EM_REPARO" and atual == "AGUARDANDO_INICIO" and pecas_pendentes(servicos):
+        # Em vez de uma mensagem de erro, a tela leva o usuário ao botão "Marcar peça em mãos" e o faz piscar
+        return pagina_veiculo(id, destacar_pecas=[sv["id"] for sv in pecas_pendentes(servicos)])
 
     db.execute("INSERT INTO etapas (veiculo_id, etapa, registrado_por) VALUES (?, ?, ?)",
                (id, nova, g.usuario["nome"]))

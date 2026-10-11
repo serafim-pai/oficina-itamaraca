@@ -347,3 +347,13 @@ details.comissao-detalhe { margin: 4px 0 12px; }
 details.comissao-detalhe summary { cursor: pointer; font-weight: bold; }
 .profissional-linha form { display: inline-block; margin: 2px 6px 2px 0; }
 .profissional-inativo { color: #777; }
+
+@keyframes piscar-peca {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); background: #1a3c6e; }
+    50% { box-shadow: 0 0 0 7px rgba(255, 152, 0, 0.85); background: #e67e00; }
+}
+button.piscar { animation: piscar-peca 0.9s ease-in-out infinite; outline: 3px solid #ff9800; }
+.dica-piscar { display: block; margin-top: 6px; color: #7a4a00; font-weight: bold; }
+@media (prefers-reduced-motion: reduce) {
+    button.piscar { animation: none; background: #e67e00; }
+}

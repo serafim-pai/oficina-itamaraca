@@ -349,7 +349,8 @@
                 <form method="POST" action="{{ url_for('registrar_peca_em_maos', id=veiculo['id'], servico_id=s['id']) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="em_maos" value="{{ '0' if s['peca_em_maos'] else '1' }}">
-                    <button type="submit">{{ 'Desmarcar peça em mãos' if s['peca_em_maos'] else '📦 Marcar peça em mãos' }}</button>
+                    <button type="submit" {% if s['id'] in destacar_pecas %}class="piscar"{% endif %}>{{ 'Desmarcar peça em mãos' if s['peca_em_maos'] else '📦 Marcar peça em mãos' }}</button>
+                    {% if s['id'] in destacar_pecas %}<span class="dica-piscar">👆 Marque aqui quando a peça chegar, para poder iniciar o reparo.</span>{% endif %}
                 </form>
                 {% endif %}
                 {% endif %}
@@ -1004,5 +1005,12 @@
     <script src="{{ url_for('static', filename='rascunho.js') }}"></script>
     <script src="{{ url_for('static', filename='corretor.js') }}"></script>
     <script src="{{ url_for('static', filename='peca.js') }}"></script>
+    <script>
+        // Depois de tentar iniciar o reparo sem a peça: leva a tela ao botão que está piscando
+        (function () {
+            var alvo = document.querySelector('button.piscar');
+            if (alvo) { alvo.scrollIntoView({block: 'center'}); }
+        })();
+    </script>
 </body>
 </html>

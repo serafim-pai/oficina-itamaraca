@@ -83,9 +83,32 @@ class PecaOrigemTest(AprovacaoBase):
         self.decidir("APROVADO")
         r = self.etapa("EM_REPARO")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("com a peça em mãos", r.data.decode())
+        pagina = r.data.decode()
+        self.assertIn('class="piscar"', pagina)                   # o botão "Marcar peça em mãos" pisca
+        self.assertIn("Marque aqui quando a peça chegar", pagina)
+        self.assertNotIn("O reparo só pode começar com a peça em mãos", pagina)    # sem a mensagem de erro
+        self.assertEqual(self.sql("SELECT * FROM etapas"), [])    # e o reparo não começou
         self.maos(True)
         self.assertEqual(self.etapa("EM_REPARO").status_code, 302)
+
+    def test_so_pisca_o_botao_do_servico_que_falta_a_peca(self):
+        self.peca("CLIENTE_TRAZ")
+        self.peca("CLIENTE_TRAZ", sid=self.sid2)
+        self.decidir("APROVADO")
+        self.assertEqual(self.etapa("EM_REPARO").data.decode().count('class="piscar"'), 2)
+        self.maos(True)                                   # a peça do primeiro serviço chegou
+        self.assertEqual(self.etapa("EM_REPARO").data.decode().count('class="piscar"'), 1)
+
+    def test_sem_tentar_iniciar_o_botao_nao_pisca(self):
+        self.peca("CLIENTE_TRAZ")
+        self.assertNotIn('class="piscar"', self.dono_c.get(f"/veiculos/{self.vid}").data.decode())
+
+    def test_com_a_peca_em_maos_nada_pisca(self):
+        self.peca("CLIENTE_TRAZ")
+        self.maos(True)
+        self.decidir("APROVADO")
+        self.etapa("EM_REPARO")
+        self.assertNotIn('class="piscar"', self.dono_c.get(f"/veiculos/{self.vid}").data.decode())
 
     def test_servico_sem_peca_nao_trava_o_reparo(self):
         self.decidir("APROVADO")
