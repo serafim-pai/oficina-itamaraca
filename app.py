@@ -48,6 +48,9 @@ LIMITES_PADRAO_MESES = {"LATARIA": 12, "PINTURA": 24, "MECÂNICA": 6, "ELÉTRICA
 MAX_LIMITE_MESES = 120                                         # o dono pode ajustar cada limite de 1 a 120 meses
 MAX_MOTIVO_EXCLUIR = 300                                        # letras do motivo de excluir um veículo
 MAX_MOTIVO_ARQUIVAR = 300                                       # letras do motivo de arquivar uma ficha
+INTERVALO_REVISAO_MESES = 3          # de quanto em quanto tempo avisar o cliente, enquanto durar a garantia
+DIAS_ANTECEDENCIA_AVISO = 7          # o aviso entra na lista alguns dias antes da data
+DIAS_VALIDADE_AVISO = 90             # aviso de revisão com mais atraso que isso sai da lista (vale a próxima marca)
 MAX_OBS_PAGAMENTO = 100                                         # letras da observação de um pagamento
 MAX_MOTIVO_PAGAMENTO = 300                                      # letras do motivo de apagar um pagamento
 FORMAS_PAGAMENTO = {"PIX": "Pix", "DINHEIRO": "Dinheiro", "DEBITO": "Cartão de débito",
@@ -374,6 +377,20 @@ def init_db():
             apagado_em TEXT,
             apagado_por TEXT,
             motivo_apagado TEXT
+        )
+        """
+    )
+    # Avisos de WhatsApp aos clientes (revisão de 3 em 3 meses, garantia vencendo, "não avisar mais"). Cada
+    # clique em "Avisei" vira uma linha: quem e quando. Para REVISAO, marca_meses diz qual marca foi avisada.
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avisos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            veiculo_id INTEGER NOT NULL,
+            tipo TEXT NOT NULL,
+            marca_meses INTEGER NOT NULL DEFAULT 0,
+            feito_por TEXT,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
         """
     )
@@ -1985,6 +2002,87 @@ def link_whatsapp_cobranca(veiculo, falta):
     return f"{base}?text={quote(texto)}"
 
 
+def somar_meses(data, meses):
+    """A mesma data daqui a N meses (dia 31 em mês curto vira o último dia do mês)."""
+    ano, mes = divmod(data.month - 1 + meses, 12)
+    ano, mes = data.year + ano, mes + 1
+    dia = data.day
+    while True:
+        try:
+            return date(ano, mes, dia)
+        except ValueError:
+            dia -= 1
+
+
+def texto_do_aviso(aviso):
+    """Mensagem de WhatsApp do aviso (a pessoa confere e envia)."""
+    veiculo = aviso["veiculo"]
+    nome = (veiculo["responsavel"] or "").strip()
+    carro = " ".join(p for p in (veiculo["marca"], veiculo["modelo"], veiculo["cor"]) if p)
+    abertura = f"Olá{', ' + nome if nome else ''}! Aqui é da Oficina Itamaracá.\n"
+    alvo = f"{carro + ' ' if carro else ''}placa {veiculo['placa']}"
+    if aviso["tipo"] == "GARANTIA":
+        return (abertura + f"A garantia do serviço de {aviso['servicos']} no seu veículo {alvo} vence em "
+                f"{formatar_data(aviso['garantia_ate'])}. Se notar qualquer problema, traga o carro antes dessa "
+                "data para avaliarmos sem custo de diagnóstico.\nQualquer dúvida, é só responder esta mensagem.")
+    return (abertura + f"Já faz {aviso['marca_meses']} meses desde o último serviço no seu veículo {alvo}.\n"
+            "Que tal passar aqui para uma revisão? Aproveitamos para trocar óleo e filtros e conferir se "
+            "apareceu algum problema.\n"
+            f"Sua garantia vale até {formatar_data(aviso['garantia_ate'])}.\n"
+            "Responda esta mensagem para combinar o melhor dia. Obrigado!")
+
+
+def montar_avisos(db, hoje):
+    """Clientes para avisar pelo WhatsApp. Duas situações, por ficha entregue:
+    - REVISAO: de 3 em 3 meses depois da entrega, enquanto durar a garantia mais longa da ficha;
+    - GARANTIA: a garantia vence nos próximos DIAS_AVISO_GARANTIA dias.
+    Não entram: ficha arquivada, carro que já voltou (existe ficha mais nova com a mesma placa) e quem pediu
+    "não avisar mais". Um "Avisei" tira o cliente da lista até a próxima marca."""
+    ultima_ficha = {}
+    for v in db.execute("SELECT id, placa FROM veiculos"):
+        chave = normalizar(v["placa"])
+        ultima_ficha[chave] = max(ultima_ficha.get(chave, 0), v["id"])
+    avisos_feitos = {}
+    for a in db.execute("SELECT * FROM avisos"):
+        avisos_feitos.setdefault(a["veiculo_id"], []).append(a)
+    lista = []
+    for ficha in db.execute("SELECT v.*, e.id AS entrega_id, e.data_entrega FROM entregas e "
+                            "JOIN veiculos v ON v.id = e.veiculo_id WHERE v.arquivado = 0 ORDER BY e.data_entrega, e.id"):
+        if ultima_ficha[normalizar(ficha["placa"])] != ficha["id"]:
+            continue
+        feitos = avisos_feitos.get(ficha["id"], [])
+        if any(a["tipo"] == "NAO_AVISAR" for a in feitos):
+            continue
+        itens = db.execute("SELECT * FROM entrega_itens WHERE entrega_id = ? AND garantia_ate IS NOT NULL "
+                           "ORDER BY garantia_ate DESC", (ficha["entrega_id"],)).fetchall()
+        if not itens:
+            continue
+        fim = date.fromisoformat(itens[0]["garantia_ate"])
+        entrega = date.fromisoformat(ficha["data_entrega"])
+        limite = hoje + timedelta(days=DIAS_ANTECEDENCIA_AVISO)
+        marca, devida = INTERVALO_REVISAO_MESES, None
+        while somar_meses(entrega, marca) <= min(fim, limite):
+            devida = marca
+            marca += INTERVALO_REVISAO_MESES
+        ja_avisada = max((a["marca_meses"] for a in feitos if a["tipo"] == "REVISAO"), default=0)
+        if devida and devida > ja_avisada and somar_meses(entrega, devida) >= hoje - timedelta(days=DIAS_VALIDADE_AVISO):
+            lista.append({"veiculo": ficha, "tipo": "REVISAO", "marca_meses": devida,
+                          "data": somar_meses(entrega, devida), "garantia_ate": itens[0]["garantia_ate"]})
+        vencendo = [i for i in itens if hoje <= date.fromisoformat(i["garantia_ate"])
+                    <= hoje + timedelta(days=DIAS_AVISO_GARANTIA)]
+        if vencendo and not any(a["tipo"] == "GARANTIA" for a in feitos):
+            proxima = min(vencendo, key=lambda i: i["garantia_ate"])
+            lista.append({"veiculo": ficha, "tipo": "GARANTIA", "marca_meses": 0,
+                          "data": date.fromisoformat(proxima["garantia_ate"]), "garantia_ate": proxima["garantia_ate"],
+                          "servicos": proxima["tipo"]})
+    for aviso in lista:
+        aviso["dias"] = (aviso["data"] - hoje).days
+        telefone = aviso["veiculo"]["telefone"]
+        aviso["whatsapp"] = (f"https://wa.me/55{telefone}" if telefone else "https://wa.me/") + \
+            f"?text={quote(texto_do_aviso(aviso))}"
+    return sorted(lista, key=lambda a: (a["data"], a["veiculo"]["id"]))
+
+
 MESES_EXTENSO = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
                  "outubro", "novembro", "dezembro")
 DIAS_AVISO_GARANTIA = 30             # garantias que vencem nesse prazo aparecem no relatório
@@ -2371,7 +2469,7 @@ def excluir_veiculo(id):
                    "VALUES (?, ?, ?, ?, ?)",
                    (id, veiculo["placa"], veiculo["responsavel"], motivo, g.usuario["nome"]))
         devolver_pecas(db, "veiculo_id = ?", (id,), "Veículo excluído")
-        for tabela in ("fotos", "fotos_historico", "servicos", "aprovacoes", "prazos", "etapas", "arquivamentos", "pagamentos"):
+        for tabela in ("fotos", "fotos_historico", "servicos", "aprovacoes", "prazos", "etapas", "arquivamentos", "pagamentos", "avisos"):
             db.execute(f"DELETE FROM {tabela} WHERE veiculo_id = ?", (id,))
         db.execute("DELETE FROM veiculos WHERE id = ?", (id,))
         db.commit()
@@ -2462,6 +2560,35 @@ def a_receber():
     return render_template("a_receber.html", fichas=fichas, total_falta=sum(f["falta"] for f in fichas),
                            formatar_data=formatar_data, formatar_dinheiro=formatar_dinheiro,
                            formatar_telefone=formatar_telefone)
+
+
+@app.route("/avisos")
+def avisos():
+    """Clientes para avisar pelo WhatsApp (revisão e garantia vencendo). Dono e funcionário veem; não mostra dinheiro."""
+    lista = montar_avisos(get_db(), hoje_brasil())
+    return render_template("avisos.html", avisos=lista, formatar_data=formatar_data,
+                           intervalo=INTERVALO_REVISAO_MESES, dias_garantia=DIAS_AVISO_GARANTIA,
+                           formatar_telefone=formatar_telefone)
+
+
+@app.route("/veiculos/<int:id>/avisos", methods=["POST"])
+def registrar_aviso(id):
+    """Clique em "Avisei" ou "Não avisar mais". O servidor confere qual aviso está pendente na ficha, em vez de
+    confiar no que veio do formulário."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    tipo = request.form.get("tipo", "")
+    if tipo == "NAO_AVISAR":
+        db.execute("INSERT INTO avisos (veiculo_id, tipo, feito_por) VALUES (?, 'NAO_AVISAR', ?)",
+                   (id, g.usuario["nome"]))
+    elif tipo in ("REVISAO", "GARANTIA"):
+        pendente = next((a for a in montar_avisos(db, hoje_brasil())
+                         if a["veiculo"]["id"] == id and a["tipo"] == tipo), None)
+        if pendente:
+            db.execute("INSERT INTO avisos (veiculo_id, tipo, marca_meses, feito_por) VALUES (?, ?, ?, ?)",
+                       (id, tipo, pendente["marca_meses"], g.usuario["nome"]))
+    db.commit()
+    return redirect(url_for("avisos"))
 
 
 @app.route("/veiculos/<int:id>/arquivar", methods=["POST"])

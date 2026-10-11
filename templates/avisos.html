@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avisos - Oficina Itamaracá</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+    {% include '_menu.html' %}
+    <h1>Avisos aos clientes</h1>
+    <p class="pequeno">Clientes para avisar pelo WhatsApp: <strong>revisão de {{ intervalo }} em {{ intervalo }} meses</strong>
+        depois da entrega, enquanto durar a garantia, e <strong>garantia vencendo</strong> nos próximos {{ dias_garantia }} dias.
+        Clique em <strong>WhatsApp</strong>, confira a mensagem e envie. Depois clique em <strong>Avisei</strong> para o cliente
+        sair da lista até o próximo aviso. Carro que já voltou à oficina não aparece.</p>
+    {% if avisos %}
+    <p><strong>{{ avisos|length }}</strong> {{ 'aviso' if avisos|length == 1 else 'avisos' }} para fazer.</p>
+    <div class="tabela-rolavel">
+    <table class="relatorio">
+        <tr><th>Aviso</th><th>Placa</th><th>Cliente</th><th>Data</th><th>O que fazer</th></tr>
+        {% for a in avisos %}
+        <tr>
+            <td>{% if a['tipo'] == 'REVISAO' %}<span class="selo selo-revisao">Revisão de {{ a['marca_meses'] }} meses</span>
+                {% else %}<span class="selo selo-garantia-aviso">Garantia vencendo</span>{% endif %}</td>
+            <td><a href="{{ url_for('ver_veiculo', id=a['veiculo']['id']) }}">{{ a['veiculo']['placa'] }}</a><br>
+                <span class="pequeno">{{ a['veiculo']['marca'] or '' }} {{ a['veiculo']['modelo'] or '' }}</span></td>
+            <td>{{ a['veiculo']['responsavel'] or '-' }}<br>
+                <span class="pequeno">{{ formatar_telefone(a['veiculo']['telefone']) if a['veiculo']['telefone'] else 'sem telefone' }}</span></td>
+            <td>{{ formatar_data(a['data'].isoformat()) }}<br>
+                <span class="pequeno">{% if a['dias'] < 0 %}atrasado {{ -a['dias'] }} {{ 'dia' if a['dias'] == -1 else 'dias' }}{% elif a['dias'] == 0 %}hoje{% else %}em {{ a['dias'] }} {{ 'dia' if a['dias'] == 1 else 'dias' }}{% endif %}</span></td>
+            <td class="avisos-acoes">
+                {% if a['veiculo']['telefone'] %}<a href="{{ a['whatsapp'] }}" target="_blank" rel="noopener">💬 WhatsApp</a><br>{% endif %}
+                <form method="POST" action="{{ url_for('registrar_aviso', id=a['veiculo']['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="tipo" value="{{ a['tipo'] }}">
+                    <button type="submit">Avisei</button>
+                </form>
+                <form method="POST" action="{{ url_for('registrar_aviso', id=a['veiculo']['id']) }}"
+                      onsubmit="return confirm('Parar de avisar o cliente da placa {{ a['veiculo']['placa']|e }}?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="tipo" value="NAO_AVISAR">
+                    <button type="submit" class="secundario">Não avisar mais</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    </div>
+    {% else %}
+    <p>Nenhum cliente para avisar agora. 🎉</p>
+    {% endif %}
+    <script src="{{ url_for('static', filename='continuo.js') }}"></script>
+</body>
+</html>

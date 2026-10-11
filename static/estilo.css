@@ -326,3 +326,8 @@ details.arquivar-veiculo { border: 1px solid #c9d3e3; border-radius: 4px; paddin
 .lancamento.pagamento-apagado strong { text-decoration: line-through; }
 .lancamento .pequeno { color: #555; font-size: 12px; }
 details.apagar-pagamento { margin: 4px 0; font-size: 14px; }
+
+.selo-revisao { background: #cfe2ff; color: #0a3d91; }
+.selo-garantia-aviso { background: #fff3cd; color: #5c4400; }
+.avisos-acoes form { display: inline-block; margin: 2px 4px 2px 0; }
+.avisos-acoes .secundario { background: #6b7280; }
