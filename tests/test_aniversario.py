@@ -96,8 +96,17 @@ class AniversarioNosAvisosTest(Base):
         self.assertIn("https://wa.me/5581987654321?text=", pagina)
         self.assertIn("Feliz%20anivers%C3%A1rio", pagina)
         self.assertIn("revis%C3%A3o%20geral%2C%20alinhamento%20e%20balanceamento%20gr%C3%A1tis", pagina)
-        self.assertIn("vale%20at%C3%A9%2031/10/2026", pagina)
+        self.assertIn("v%C3%A1lido%20at%C3%A9%2031/10/2026", pagina)
+        self.assertIn("placa%20ABC1D23", pagina)
         self.assertIn("brinde: revisão geral, alinhamento e balanceamento grátis", pagina)
+
+    def test_mensagem_de_aniversario_e_curta(self):
+        from urllib.parse import unquote
+        self.definir("1985-10-20", telefone="81987654321")
+        link = next(l.split('"')[0] for l in self.lista().split('href="') if l.startswith("https://wa.me/"))
+        texto = unquote(link.split("?text=")[1])
+        self.assertLess(len(texto), 260)
+        self.assertEqual(texto.count("\n"), 2)
 
     def test_mensagens_de_whatsapp_nao_levam_emoji(self):
         """O WhatsApp Web estraga emoji vindo por link (aparece como "?"); por isso a mensagem vai só com texto."""

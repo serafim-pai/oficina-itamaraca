@@ -2041,10 +2041,9 @@ def texto_do_aviso(aviso):
                 "data para avaliarmos.\nQualquer dúvida, é só responder esta mensagem.")
     if aviso["tipo"] == "ANIVERSARIO":
         fim_do_mes = somar_meses(aviso["data"].replace(day=1), 1) - timedelta(days=1)
-        return (abertura + "*Feliz aniversário!* Neste mês de aniversário a Oficina Itamaracá quer te dar um "
-                f"presente: {BRINDE_ANIVERSARIO} para o seu veículo {alvo}.\n"
-                f"O brinde vale até {formatar_data(fim_do_mes.isoformat())}.\n"
-                "Responda esta mensagem para combinar o melhor dia. Obrigado!")
+        return (abertura + f"*Feliz aniversário!* Neste mês você ganha {BRINDE_ANIVERSARIO} no seu veículo "
+                f"(placa {veiculo['placa']}), válido até {formatar_data(fim_do_mes.isoformat())}.\n"
+                "Responda para combinar o melhor dia!")
     return (abertura + f"Já faz {aviso['marca_meses']} meses desde o último serviço no seu veículo {alvo}.\n"
             "Que tal passar aqui para uma revisão? Aproveitamos para trocar óleo e filtros e conferir se "
             "apareceu algum problema.\n"
