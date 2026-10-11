@@ -668,7 +668,16 @@ def cabecalhos_de_seguranca(resposta):
 
 @app.context_processor
 def dados_para_as_telas():
-    return {"usuario": g.get("usuario")}
+    def contar_avisos():
+        """Quantos clientes esperam aviso (para o número no menu). Calcula uma vez por tela e nunca quebra a página."""
+        if "avisos_pendentes" not in g:
+            try:
+                g.avisos_pendentes = len(montar_avisos(get_db(), hoje_brasil()))
+            except Exception:
+                app.logger.exception("Não foi possível contar os avisos para o menu")
+                g.avisos_pendentes = 0
+        return g.avisos_pendentes
+    return {"usuario": g.get("usuario"), "contar_avisos": contar_avisos}
 
 
 @app.errorhandler(CSRFError)

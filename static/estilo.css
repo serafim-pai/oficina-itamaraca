@@ -357,3 +357,6 @@ button.piscar { animation: piscar-peca 0.9s ease-in-out infinite; outline: 3px s
 @media (prefers-reduced-motion: reduce) {
     button.piscar { animation: none; background: #e67e00; }
 }
+
+.contador-menu { display: inline-block; min-width: 20px; padding: 1px 6px; margin-left: 4px; border-radius: 10px;
+                 background: #e53935; color: #fff; font-size: 12px; font-weight: bold; text-align: center; }

@@ -1,7 +1,7 @@
 <nav>
     <a href="{{ url_for('index') }}">🚗 Veículos</a>
     {% if usuario %}<a href="{{ url_for('estoque') }}">📦 Estoque</a>{% endif %}
-    {% if usuario %}<a href="{{ url_for('avisos') }}">📣 Avisos</a>{% endif %}
+    {% if usuario %}<a href="{{ url_for('avisos') }}">📣 Avisos{% set pendentes = contar_avisos() %}{% if pendentes %} <span class="contador-menu" title="Clientes para avisar">{{ pendentes }}</span>{% endif %}</a>{% endif %}
     {% if usuario and usuario['tipo'] == 'DONO' %}
     <a href="{{ url_for('a_receber') }}">💰 A receber</a>
     <a href="{{ url_for('profissionais') }}">👷 Profissionais</a>
