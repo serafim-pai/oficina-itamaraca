@@ -63,6 +63,39 @@
         <label for="chassi">Chassi (opcional, ajuda a achar a peça certa)</label>
         <input type="text" id="chassi" name="chassi" maxlength="20" autocapitalize="characters" value="{{ dados.get('chassi', '') }}">
 
+        <h3 class="conferencia-titulo">Conferência de entrada (opcional)</h3>
+        <span class="aviso">Como o carro chegou. Evita discussão na entrega e dá para imprimir o termo de entrada na ficha.</span>
+        <label for="cad_combustivel">Nível de combustível</label>
+            <select id="cad_combustivel" name="combustivel">
+                <option value="">Não conferido</option>
+                {% for chave, nome in combustiveis.items() %}
+                <option value="{{ chave }}" {{ 'selected' if dados.get('combustivel', '') == chave }}>{{ nome }}</option>
+                {% endfor %}
+            </select>
+            <fieldset class="luzes-painel">
+                <legend>Itens deixados no carro</legend>
+                {% for chave, nome in itens_deixados.items() %}
+                <label class="luz"><input type="checkbox" name="itens" value="{{ chave }}"
+                       {{ 'checked' if chave in dados.get('itens', []) }}> {{ nome }}</label>
+                {% endfor %}
+                <input type="text" name="itens_outros" maxlength="{{ max_itens_outros }}"
+                       placeholder="Outros pertences deixados no carro" value="{{ dados.get('itens_outros', '') }}"
+                       aria-label="Outros itens deixados no carro">
+            </fieldset>
+            <fieldset class="luzes-painel">
+                <legend>Luzes acesas no painel</legend>
+                {% for chave, nome in luzes_painel.items() %}
+                <label class="luz"><input type="checkbox" name="luzes" value="{{ chave }}"
+                       {{ 'checked' if chave in dados.get('luzes', []) }}> {{ nome }}</label>
+                {% endfor %}
+                <input type="text" name="luz_outra" maxlength="{{ max_luz_outra }}" placeholder="Qual é a outra luz?"
+                       value="{{ dados.get('luz_outra', '') }}" aria-label="Nome da outra luz acesa">
+                <span class="aviso">Ligue o carro e confira o painel. Luzes que não apagam podem indicar outros problemas,
+                    e o cliente é avisado no orçamento.</span>
+            </fieldset>
+            <label for="cad_avarias">Avarias que o carro já tinha (riscos, amassados, defeitos)</label>
+            <textarea id="cad_avarias" name="avarias" rows="3" maxlength="{{ max_avarias }}">{{ dados.get('avarias', '') }}</textarea>
+
         <label for="telefone">WhatsApp do cliente (opcional)</label>
         <input type="tel" id="telefone" name="telefone" inputmode="tel" placeholder="(81) 98765-4321" value="{{ dados.get('telefone', '') }}">
         <span class="aviso">Com DDD. Serve para enviar o orçamento pelo WhatsApp.</span>

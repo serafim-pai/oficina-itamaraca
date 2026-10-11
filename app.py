@@ -52,6 +52,17 @@ INTERVALO_REVISAO_MESES = 3          # de quanto em quanto tempo avisar o client
 DIAS_ANTECEDENCIA_AVISO = 7          # o aviso entra na lista alguns dias antes da data
 DIAS_VALIDADE_AVISO = 90             # aviso de revisão com mais atraso que isso sai da lista (vale a próxima marca)
 BRINDE_ANIVERSARIO = "revisão geral, alinhamento e balanceamento grátis"   # presente do mês de aniversário
+# Conferência de entrada (como o carro chegou). Nada marcado = ainda não conferido.
+LUZES_PAINEL = {"NENHUMA": "Nenhuma luz acesa", "MOTOR": "Injeção / motor", "FREIO": "Freio / ABS",
+                "BATERIA": "Bateria / alternador", "OLEO": "Pressão do óleo", "TEMPERATURA": "Temperatura do motor",
+                "AIRBAG": "Airbag", "OUTRA": "Outra luz"}
+COMBUSTIVEIS = {"RESERVA": "Reserva / vazio", "1/4": "1/4", "1/2": "1/2", "3/4": "3/4", "CHEIO": "Cheio"}
+ITENS_DEIXADOS = {"ESTEPE": "Estepe", "MACACO": "Macaco e chave de roda", "TRIANGULO": "Triângulo",
+                  "CHAVE_RESERVA": "Chave reserva", "RADIO": "Rádio / som", "TAPETES": "Tapetes"}
+COLUNAS_CONFERENCIA = ("luzes_painel", "luzes_outra", "combustivel", "itens_deixados", "itens_outros", "avarias")
+MAX_LUZ_OUTRA = 60                   # letras do nome da outra luz
+MAX_ITENS_OUTROS = 100               # letras dos outros pertences deixados no carro
+MAX_AVARIAS = 500                    # letras das avarias que o carro já tinha
 MAX_OBS_PAGAMENTO = 100                                         # letras da observação de um pagamento
 MAX_MOTIVO_PAGAMENTO = 300                                      # letras do motivo de apagar um pagamento
 FORMAS_PAGAMENTO = {"PIX": "Pix", "DINHEIRO": "Dinheiro", "DEBITO": "Cartão de débito",
@@ -72,7 +83,7 @@ TRAVADOS_APOS_ENTREGA = {"registrar_servico", "registrar_resolucao", "registrar_
                          "registrar_aprovacao", "registrar_prazo", "registrar_garantia", "fechar_entrega",
                          "adicionar_fotos", "excluir_foto", "trocar_foto",
                          "adicionar_fotos_problema", "excluir_foto_problema", "registrar_etapa",
-                         "usar_peca", "devolver_peca", "registrar_referencia", "registrar_dados_veiculo",
+                         "usar_peca", "devolver_peca", "registrar_referencia", "registrar_dados_veiculo", "registrar_conferencia",
                          "editar_problema"}
 MAX_DADO_VEICULO = 40                # letras de marca, modelo, cor e quilometragem do veículo
 MAX_PECA_BUSCA = 100                 # letras do nome da peça pesquisada na Web
@@ -547,6 +558,10 @@ def init_db():
     # Data de nascimento do responsável (opcional, AAAA-MM-DD): só para o brinde do mês de aniversário
     if "data_nascimento" not in colunas_veiculos:
         db.execute("ALTER TABLE veiculos ADD COLUMN data_nascimento TEXT")
+    # Conferência de entrada e hora do cadastro (criado_em fica vazio nas fichas antigas)
+    for coluna in COLUNAS_CONFERENCIA + ("criado_em",):
+        if coluna not in colunas_veiculos:
+            db.execute(f"ALTER TABLE veiculos ADD COLUMN {coluna} TEXT")
     if "arquivado" not in colunas_veiculos:
         db.execute("ALTER TABLE veiculos ADD COLUMN arquivado INTEGER NOT NULL DEFAULT 0")
     # Fotos da entrega: "momento" diz quando a foto foi tirada. ENTRADA (as que já existiam), ENTREGA, ou
@@ -1014,7 +1029,9 @@ def pagina_inicial(erros=None, dados=None):
     fotos = {}
     for foto in db.execute("SELECT id, veiculo_id FROM fotos WHERE momento = 'ENTRADA' ORDER BY id"):
         fotos.setdefault(foto["veiculo_id"], []).append(foto["id"])
-    return render_template("index.html", busca=busca, total_veiculos=total_veiculos, arquivado=arquivado,
+    return render_template("index.html", luzes_painel=LUZES_PAINEL, combustiveis=COMBUSTIVEIS,
+                           itens_deixados=ITENS_DEIXADOS, max_luz_outra=MAX_LUZ_OUTRA,
+                           max_itens_outros=MAX_ITENS_OUTROS, max_avarias=MAX_AVARIAS, busca=busca, total_veiculos=total_veiculos, arquivado=arquivado,
                            ver_arquivadas=ver_arquivadas, total_arquivadas=total_arquivadas,
                            arquivadas_na_busca=arquivadas_na_busca,
                            veiculos=veiculos, fotos=fotos, erros=erros or [],
@@ -1346,6 +1363,9 @@ def link_whatsapp(veiculo, servicos, total_centavos):
     carro = " ".join(p for p in (veiculo["marca"], veiculo["modelo"], veiculo["cor"]) if p)
     abertura = f"Olá{', ' + nome if nome else ''}! Aqui é da Oficina Itamaracá.\n"
     abertura += f"Segue o orçamento do veículo {carro + ' ' if carro else ''}placa {veiculo['placa']}:\n"
+    if tem_luzes_acesas(veiculo):
+        abertura += (f"Atenção: o veículo chegou com luzes acesas no painel ({descrever_luzes(veiculo)}). "
+                     "Elas podem indicar outros problemas, além do serviço pedido.\n")
     fim = (f"\n*Total: {formatar_dinheiro(total_centavos)}*\n\n"
            "Você aprova o orçamento? Responda *APROVADO* ou *RECUSADO*.")
     linhas = [f"• {s['tipo'].capitalize()}: {' '.join(s['problema'].split())[:100]} - "
@@ -1391,6 +1411,10 @@ def cadastrar_veiculo():
     dados["telefone"] = request.form.get("telefone", "").strip()
     dados["data_nascimento"] = request.form.get("data_nascimento", "").strip()
     nascimento, erro_nascimento = interpretar_nascimento(dados["data_nascimento"], hoje_brasil())
+    entrada, erro_conferencia = ler_conferencia(request.form)
+    dados.update({"luzes": request.form.getlist("luzes"), "luz_outra": request.form.get("luz_outra", ""),
+                  "combustivel": request.form.get("combustivel", ""), "itens": request.form.getlist("itens"),
+                  "itens_outros": request.form.get("itens_outros", ""), "avarias": request.form.get("avarias", "")})
     documento_deixado = request.form.get("documento_deixado") == "on"
 
     erros = []
@@ -1398,6 +1422,8 @@ def cadastrar_veiculo():
         erros.append(erro_telefone)
     if erro_nascimento:
         erros.append(erro_nascimento)
+    if erro_conferencia:
+        erros.append(erro_conferencia)
     if erro_chassi:
         erros.append(erro_chassi)
     if len(dados["motor"]) > MAX_DADO_VEICULO:
@@ -1435,8 +1461,9 @@ def cadastrar_veiculo():
             """
             INSERT INTO veiculos
                 (responsavel, placa, marca, modelo, cor, ano, quilometragem, documento_deixado, telefone, chassi, motor,
-                 data_nascimento)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 data_nascimento, luzes_painel, luzes_outra, combustivel, itens_deixados, itens_outros, avarias,
+                 criado_em)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 dados["responsavel"],
@@ -1451,6 +1478,8 @@ def cadastrar_veiculo():
                 dados["chassi"] or None,
                 dados["motor"] or None,
                 nascimento,
+                *[entrada[coluna] for coluna in COLUNAS_CONFERENCIA],
+                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
             ),
         )
         guardar_fotos(db, cursor.lastrowid, preparadas, criados)
@@ -1558,7 +1587,10 @@ def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False):
     arquivamento = (db.execute("SELECT * FROM arquivamentos WHERE veiculo_id = ? AND acao = 'ARQUIVADA' "
                                "ORDER BY id DESC LIMIT 1", (id,)).fetchone() if veiculo["arquivado"] else None)
     pagamento = dados_de_pagamento(db, id) if g.usuario and g.usuario["tipo"] == "DONO" else None
-    return render_template("veiculo.html", pagamento=pagamento, formas_pagamento=FORMAS_PAGAMENTO,
+    return render_template("veiculo.html", conf=conferencia(veiculo), tem_luzes=tem_luzes_acesas(veiculo),
+                           luzes_painel=LUZES_PAINEL, combustiveis=COMBUSTIVEIS, itens_deixados=ITENS_DEIXADOS,
+                           max_luz_outra=MAX_LUZ_OUTRA, max_itens_outros=MAX_ITENS_OUTROS, max_avarias=MAX_AVARIAS,
+                           pagamento=pagamento, formas_pagamento=FORMAS_PAGAMENTO,
                            max_obs_pagamento=MAX_OBS_PAGAMENTO, max_motivo_pagamento=MAX_MOTIVO_PAGAMENTO,
                            arquivamento=arquivamento, max_motivo_arquivar=MAX_MOTIVO_ARQUIVAR,
                            passagens=passagens_anteriores(db, veiculo, hoje), max_dado_veiculo=MAX_DADO_VEICULO, max_nome_peca=MAX_NOME_PECA_COMPRA, situacoes_peca=SITUACOES_PECA,
@@ -2012,6 +2044,69 @@ def link_whatsapp_cobranca(veiculo, falta):
     return f"{base}?text={quote(texto)}"
 
 
+def ler_luzes(formulario):
+    """Lê as luzes do painel marcadas no formulário. Devolve (luzes ou None, outra luz, erro).
+    Nenhuma marcada = não conferido (None); "Nenhuma luz acesa" é uma resposta e não pode vir junto com luzes."""
+    marcadas = [k for k in LUZES_PAINEL if k in formulario.getlist("luzes")]
+    outra = " ".join(formulario.get("luz_outra", "").split())
+    if outra and "OUTRA" not in marcadas:
+        marcadas.append("OUTRA")
+    if "NENHUMA" in marcadas and len(marcadas) > 1:
+        return None, "", 'Marque "Nenhuma luz acesa" ou as luzes que estão acesas, não as duas coisas.'
+    if "OUTRA" in marcadas and not outra:
+        return None, "", "Escreva qual é a outra luz acesa no painel."
+    if len(outra) > MAX_LUZ_OUTRA:
+        return None, "", f"O nome da outra luz pode ter no máximo {MAX_LUZ_OUTRA} letras."
+    return (",".join(marcadas) or None), outra, None
+
+
+def ler_conferencia(formulario):
+    """Lê a conferência de entrada do formulário. Devolve (dados por coluna, erro). Tudo é opcional."""
+    luzes, outra, erro = ler_luzes(formulario)
+    if erro:
+        return None, erro
+    combustivel = formulario.get("combustivel", "")
+    if combustivel and combustivel not in COMBUSTIVEIS:
+        return None, "Escolha o nível de combustível da lista."
+    itens = [k for k in ITENS_DEIXADOS if k in formulario.getlist("itens")]
+    itens_outros = " ".join(formulario.get("itens_outros", "").split())
+    if len(itens_outros) > MAX_ITENS_OUTROS:
+        return None, f"Os outros itens deixados podem ter no máximo {MAX_ITENS_OUTROS} letras."
+    avarias = "\n".join(" ".join(linha.split()) for linha in formulario.get("avarias", "").splitlines() if linha.strip())
+    if len(avarias) > MAX_AVARIAS:
+        return None, f"As avarias podem ter no máximo {MAX_AVARIAS} letras."
+    return {"luzes_painel": luzes, "luzes_outra": outra or None, "combustivel": combustivel or None,
+            "itens_deixados": ",".join(itens) or None, "itens_outros": itens_outros or None,
+            "avarias": avarias or None}, None
+
+
+def descrever_luzes(veiculo):
+    """Texto das luzes do painel da ficha, ou None se não foi conferido."""
+    nomes = []
+    for chave in (veiculo["luzes_painel"] or "").split(","):
+        nome = LUZES_PAINEL.get(chave)
+        if nome:
+            nomes.append(f"{nome} ({veiculo['luzes_outra']})" if chave == "OUTRA" and veiculo["luzes_outra"] else nome)
+    return ", ".join(nomes) or None
+
+
+def tem_luzes_acesas(veiculo):
+    """Verdadeiro se foi conferido e alguma luz estava acesa."""
+    return bool(veiculo["luzes_painel"]) and veiculo["luzes_painel"] != "NENHUMA"
+
+
+def conferencia(veiculo):
+    """A conferência de entrada da ficha em texto: combustível, itens, luzes e avarias (None = não conferido).
+    'feita' é verdadeiro se alguma coisa foi registrada."""
+    itens = [ITENS_DEIXADOS[k] for k in (veiculo["itens_deixados"] or "").split(",") if k in ITENS_DEIXADOS]
+    if veiculo["itens_outros"]:
+        itens.append(veiculo["itens_outros"])
+    dados = {"combustivel": COMBUSTIVEIS.get(veiculo["combustivel"]), "itens": ", ".join(itens) or None,
+             "luzes": descrever_luzes(veiculo), "avarias": veiculo["avarias"] or None}
+    dados["feita"] = any(dados.values())
+    return dados
+
+
 def interpretar_nascimento(texto, hoje):
     """Lê a data de nascimento digitada ('AAAA-MM-DD'). Vazio é permitido. Devolve (data ISO ou None, erro ou None)."""
     texto = (texto or "").strip()
@@ -2381,7 +2476,7 @@ def comprovante(id):
     for p in db.execute("SELECT ep.* FROM entrega_pecas ep JOIN entrega_itens ei ON ei.id = ep.entrega_item_id "
                         "WHERE ei.entrega_id = ? ORDER BY ep.id", (entrega["id"],)):
         pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
-    return render_template("comprovante.html", pecas_entrega=pecas_entrega, fotos_problema=fotos_problema, veiculo=veiculo, entrega=entrega, itens=itens, aprovacao=aprovacao,
+    return render_template("comprovante.html", conf=conferencia(veiculo), pecas_entrega=pecas_entrega, fotos_problema=fotos_problema, veiculo=veiculo, entrega=entrega, itens=itens, aprovacao=aprovacao,
                            fotos_entrega=fotos_entrega,
                            formatar_data=formatar_data, formatar_dinheiro=formatar_dinheiro,
                            texto_garantia=texto_garantia, nomes_formas=NOMES_FORMAS_APROVACAO)
@@ -2465,6 +2560,31 @@ def registrar_telefone(id):
     db.execute("UPDATE veiculos SET telefone = ? WHERE id = ?", (telefone, id))
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/conferencia", methods=["POST"])
+def registrar_conferencia(id):
+    """Dono e funcionário registram ou corrigem a conferência de entrada (combustível, itens deixados, luzes do
+    painel e avarias). Depois da entrega fica travada. Se algo estiver inválido, nada é salvo."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    dados, erro = ler_conferencia(request.form)
+    if erro:
+        return pagina_veiculo(id, [erro])
+    db.execute("UPDATE veiculos SET " + ", ".join(f"{c} = ?" for c in COLUNAS_CONFERENCIA) + " WHERE id = ?",
+               [dados[c] for c in COLUNAS_CONFERENCIA] + [id])
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/termo-entrada")
+def termo_entrada(id):
+    """Termo de recebimento do veículo, para imprimir e o cliente assinar: dados, conferência e fotos de entrada."""
+    db = get_db()
+    veiculo = buscar_veiculo(db, id)
+    fotos = [f["id"] for f in db.execute(
+        "SELECT id FROM fotos WHERE veiculo_id = ? AND momento = 'ENTRADA' ORDER BY id", (id,))]
+    return render_template("termo_entrada.html", veiculo=veiculo, conf=conferencia(veiculo), fotos=fotos)
 
 
 @app.route("/veiculos/<int:id>/nascimento", methods=["POST"])

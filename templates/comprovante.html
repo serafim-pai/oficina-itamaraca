@@ -25,6 +25,12 @@
             <tr><th>Veículo</th><td>{{ veiculo['marca'] or '-' }} {{ veiculo['modelo'] }} {{ veiculo['cor'] }} {{ veiculo['ano'] }}</td>
                 <th>Quilometragem</th><td>{{ veiculo['quilometragem'] or '-' }}</td></tr>
             <tr><th>Responsável</th><td colspan="3">{{ veiculo['responsavel'] or '-' }}</td></tr>
+            {% if conf['feita'] %}<tr><th>Entrada do veículo</th><td colspan="3">
+                {% if conf['combustivel'] %}Combustível: {{ conf['combustivel'] }}. {% endif %}
+                {% if conf['itens'] %}Itens deixados: {{ conf['itens'] }}. {% endif %}
+                {% if conf['luzes'] %}Luzes no painel: {{ conf['luzes'] }}. {% endif %}
+                {% if conf['avarias'] %}Avarias que já tinha: {{ conf['avarias']|replace('\n', ' / ') }}.{% endif %}
+            </td></tr>{% endif %}
         </table>
 
         <h3>Serviços realizados e garantia</h3>

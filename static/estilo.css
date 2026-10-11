@@ -333,3 +333,11 @@ details.apagar-pagamento { margin: 4px 0; font-size: 14px; }
 .avisos-acoes .secundario { background: #6b7280; }
 
 .selo-aniversario { background: #fde2f3; color: #8a1c5f; }
+
+fieldset.luzes-painel { border: 1px solid #c9d3e3; border-radius: 4px; margin: 10px 0; padding: 8px 12px; }
+fieldset.luzes-painel legend { font-weight: bold; padding: 0 6px; }
+fieldset.luzes-painel label.luz { display: block; margin: 4px 0; font-weight: normal; }
+fieldset.luzes-painel label.luz input { width: auto; margin-right: 6px; }
+h3.conferencia-titulo { margin: 18px 0 2px; color: #1a3c6e; }
+.comprovante .avarias-termo { white-space: pre-line; border: 1px solid #1a3c6e; border-radius: 4px; padding: 8px 12px;
+                              background: #fafbfd; }

@@ -35,8 +35,16 @@
         <strong>Km:</strong> {{ veiculo['quilometragem'] or '-' }}<br>
         <strong>Chassi:</strong> {{ veiculo['chassi'] or '-' }}<br>
         <strong>WhatsApp:</strong> {{ formatar_telefone(veiculo['telefone']) }}<br>
-        <strong>Nascimento:</strong> {{ formatar_data(veiculo['data_nascimento']) if veiculo['data_nascimento'] else '-' }}
+        <strong>Nascimento:</strong> {{ formatar_data(veiculo['data_nascimento']) if veiculo['data_nascimento'] else '-' }}<br>
+        <strong>Combustível (entrada):</strong> {{ conf['combustivel'] or 'não conferido' }}<br>
+        <strong>Itens deixados no carro:</strong> {{ conf['itens'] or '-' }}<br>
+        <strong>Luzes no painel (entrada):</strong> {{ conf['luzes'] or 'não conferido' }}<br>
+        <strong>Avarias que já tinha:</strong> {{ conf['avarias'] or '-' }}
     </p>
+    {% if tem_luzes %}
+    <div class="aviso-custo">⚠️ O carro chegou com <strong>luzes acesas no painel</strong>: {{ conf['luzes'] }}.
+        Avise o cliente: elas podem indicar problemas além do serviço pedido. O orçamento pelo WhatsApp já leva esse aviso.</div>
+    {% endif %}
     <details class="telefone-cliente">
         <summary>{{ 'Alterar' if veiculo['telefone'] else 'Informar' }} o WhatsApp do cliente</summary>
         <form method="POST" action="{{ url_for('registrar_telefone', id=veiculo['id']) }}">
@@ -57,6 +65,47 @@
             <button type="submit">Salvar</button>
         </form>
     </details>
+    {% if not entrega %}
+    <details class="telefone-cliente" {{ 'open' if not conf['feita'] }}>
+        <summary>🚨 {{ 'Alterar' if conf['feita'] else 'Registrar' }} a conferência de entrada (combustível, itens, luzes e avarias)</summary>
+        <form method="POST" action="{{ url_for('registrar_conferencia', id=veiculo['id']) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="fic_combustivel">Nível de combustível</label>
+            <select id="fic_combustivel" name="combustivel">
+                <option value="">Não conferido</option>
+                {% for chave, nome in combustiveis.items() %}
+                <option value="{{ chave }}" {{ 'selected' if veiculo['combustivel'] == chave }}>{{ nome }}</option>
+                {% endfor %}
+            </select>
+            <fieldset class="luzes-painel">
+                <legend>Itens deixados no carro</legend>
+                {% for chave, nome in itens_deixados.items() %}
+                <label class="luz"><input type="checkbox" name="itens" value="{{ chave }}"
+                       {{ 'checked' if chave in (veiculo['itens_deixados'] or '').split(',') }}> {{ nome }}</label>
+                {% endfor %}
+                <input type="text" name="itens_outros" maxlength="{{ max_itens_outros }}"
+                       placeholder="Outros pertences deixados no carro" value="{{ veiculo['itens_outros'] or '' }}"
+                       aria-label="Outros itens deixados no carro">
+            </fieldset>
+            <fieldset class="luzes-painel">
+                <legend>Luzes acesas no painel</legend>
+                {% for chave, nome in luzes_painel.items() %}
+                <label class="luz"><input type="checkbox" name="luzes" value="{{ chave }}"
+                       {{ 'checked' if chave in (veiculo['luzes_painel'] or '').split(',') }}> {{ nome }}</label>
+                {% endfor %}
+                <input type="text" name="luz_outra" maxlength="{{ max_luz_outra }}" placeholder="Qual é a outra luz?"
+                       value="{{ veiculo['luzes_outra'] or '' }}" aria-label="Nome da outra luz acesa">
+                <span class="aviso">Ligue o carro e confira o painel. Luzes que não apagam podem indicar outros problemas,
+                    e o cliente é avisado no orçamento.</span>
+            </fieldset>
+            <label for="fic_avarias">Avarias que o carro já tinha (riscos, amassados, defeitos)</label>
+            <textarea id="fic_avarias" name="avarias" rows="3" maxlength="{{ max_avarias }}">{{ veiculo['avarias'] or '' }}</textarea>
+            <span class="aviso">Depois da entrega este registro fica travado.</span>
+            <button type="submit">Salvar</button>
+        </form>
+    </details>
+    {% endif %}
+    <p><a href="{{ url_for('termo_entrada', id=veiculo['id']) }}">🖨️ Termo de entrada (para imprimir e assinar)</a></p>
     {% if passagens %}
     <details class="passagens" {{ 'open' if passagens|selectattr('garantias')|list }}>
         <summary>🕘 Passagens anteriores deste carro ({{ passagens|length }})
