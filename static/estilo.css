@@ -311,3 +311,8 @@ table.relatorio { margin: 6px 0 10px; }
 table.relatorio th { background: #eef2f8; color: #1a3c6e; text-align: left; }
 table.relatorio td.num, table.relatorio th.num { text-align: right; white-space: nowrap; }
 table.relatorio tr.total td { font-weight: bold; background: #eef2f8; }
+
+.ficha-arquivada { background: #fff3cd; border: 1px solid #ffc107; color: #5c4400; border-radius: 4px;
+                   padding: 8px 12px; margin: 10px 0; }
+.ficha-arquivada form { margin-top: 6px; }
+details.arquivar-veiculo { border: 1px solid #c9d3e3; border-radius: 4px; padding: 8px 12px; background: #f4f6fa; margin: 24px 0 0; }

@@ -10,6 +10,18 @@
     {% include '_menu.html' %}
     <h1>{{ veiculo['placa'] }}</h1>
     <p><a href="{{ url_for('index') }}">&larr; Voltar aos veículos</a></p>
+    {% if veiculo['arquivado'] %}
+    <div class="ficha-arquivada">
+        📁 <strong>Ficha arquivada</strong>{% if arquivamento %} por {{ arquivamento['feito_por'] }} em {{ arquivamento['criado_em']|hora_brasil }}.<br>
+        Motivo: {{ arquivamento['motivo'] }}{% endif %}
+        {% if usuario and usuario['tipo'] == 'DONO' %}
+        <form method="POST" action="{{ url_for('desarquivar_veiculo', id=veiculo['id']) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit">Desarquivar</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
     {% if recem_cadastrado %}
     <div class="ok">&#10003; Veículo <strong>{{ veiculo['placa'] }}</strong> cadastrado com sucesso. Continue abaixo: registre o problema e o tipo de serviço.</div>
     {% endif %}
@@ -43,6 +55,7 @@
             <p><strong>{{ p['data']|hora_brasil if p['data'] else 'Sem serviços registrados' }}</strong>
                &nbsp; {% if p['entrega'] %}<span class="selo selo-entregue">Entregue em {{ formatar_data(p['entrega']['data_entrega']) }}</span>
                {% else %}<span class="selo">Em andamento</span>{% endif %}
+               {% if p['veiculo']['arquivado'] %}<span class="selo">📁 Arquivada</span>{% endif %}
                &nbsp; {{ formatar_dinheiro(p['total_centavos']) }}
                &nbsp; <a href="{{ url_for('ver_veiculo', id=p['veiculo']['id']) }}">Abrir a ficha</a>
                {% if p['entrega'] %}&nbsp; <a href="{{ url_for('comprovante', id=p['veiculo']['id']) }}">Comprovante</a>{% endif %}</p>
@@ -739,6 +752,20 @@
     </div>
     {% else %}
     <p>Nenhum problema registrado ainda.</p>
+    {% endif %}
+
+    {% if usuario and usuario['tipo'] == 'DONO' and not veiculo['arquivado'] %}
+    <details class="arquivar-veiculo">
+        <summary>Arquivar esta ficha</summary>
+        <form method="POST" action="{{ url_for('arquivar_veiculo', id=veiculo['id']) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="aviso">Use quando o cliente desistiu ou o carro não volta mais. A ficha sai da lista principal,
+                mas <strong>nada é apagado</strong>: ela fica em "Ver arquivadas" e dá para desarquivar.</div>
+            <label for="motivo_arquivar">Motivo de arquivar a ficha *</label>
+            <textarea id="motivo_arquivar" name="motivo" rows="3" maxlength="{{ max_motivo_arquivar }}"></textarea>
+            <button type="submit">Arquivar a ficha</button>
+        </form>
+    </details>
     {% endif %}
 
     {% if usuario and usuario['tipo'] == 'DONO' and not entrega and not desfeitas %}

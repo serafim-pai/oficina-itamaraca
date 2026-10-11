@@ -47,6 +47,7 @@ LIMITES_PADRAO_MESES = {"LATARIA": 12, "PINTURA": 24, "MECÂNICA": 6, "ELÉTRICA
                         "FREIOS": 6, "POLIMENTO E ESTÉTICA": 3, "OUTRO": 12}
 MAX_LIMITE_MESES = 120                                         # o dono pode ajustar cada limite de 1 a 120 meses
 MAX_MOTIVO_EXCLUIR = 300                                        # letras do motivo de excluir um veículo
+MAX_MOTIVO_ARQUIVAR = 300                                       # letras do motivo de arquivar uma ficha
 MAX_MOTIVO_DESFAZER = 300                                      # letras do motivo de desfazer uma entrega
 MAX_CONDICOES = 1500                                           # letras das condições que cancelam a garantia
 # Texto sugerido no fechamento da entrega (o dono pode editar antes de fechar).
@@ -339,6 +340,20 @@ def init_db():
         )
         """
     )
+    # Fichas arquivadas saem da lista principal, mas nada é apagado. Cada arquivar/desarquivar fica registrado
+    # (quem, quando e por quê); o estado de agora está na coluna veiculos.arquivado.
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS arquivamentos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            veiculo_id INTEGER NOT NULL,
+            acao TEXT NOT NULL,
+            motivo TEXT,
+            feito_por TEXT,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
     # História 9: estoque de peças e tintas. Cada item guarda quantidade (inteira), mínimo para o aviso de estoque
     # baixo, custo e preço de venda (em centavos). Toda mudança de quantidade vira uma linha em
     # estoque_movimentos (nunca apagada): quem, quando e por quê.
@@ -487,6 +502,9 @@ def init_db():
     # Motor do veículo (cilindrada e potência, como "1.8 8v 99cv"): a peça certa muda conforme o motor
     if "motor" not in colunas_veiculos:
         db.execute("ALTER TABLE veiculos ADD COLUMN motor TEXT")
+    # Ficha arquivada (1) some da lista principal; só o dono arquiva e desarquiva
+    if "arquivado" not in colunas_veiculos:
+        db.execute("ALTER TABLE veiculos ADD COLUMN arquivado INTEGER NOT NULL DEFAULT 0")
     # Fotos da entrega: "momento" diz quando a foto foi tirada. ENTRADA (as que já existiam), ENTREGA, ou
     # ENTREGA_DESFEITA (as da entrega que depois foi desfeita; ficam guardadas, ligadas a ela).
     colunas_fotos = [c[1] for c in db.execute("PRAGMA table_info(fotos)")]
@@ -937,15 +955,24 @@ def pagina_inicial(erros=None, dados=None):
     if request.method == "GET" and request.args.get("cadastrado", "").isdigit():
         cadastrado = db.execute("SELECT id, placa FROM veiculos WHERE id = ?",
                                 (int(request.args["cadastrado"]),)).fetchone()
-    veiculos = db.execute("SELECT * FROM veiculos ORDER BY id DESC").fetchall()
+    arquivado = request.args.get("arquivado", "")[:20] if request.method == "GET" else ""
+    ver_arquivadas = request.method == "GET" and request.args.get("arquivadas") == "1"
+    todos = db.execute("SELECT * FROM veiculos ORDER BY id DESC").fetchall()
+    total_arquivadas = sum(1 for v in todos if v["arquivado"])
+    veiculos = [v for v in todos if bool(v["arquivado"]) == ver_arquivadas]
     total_veiculos = len(veiculos)
     busca = " ".join(request.args.get("q", "").split())[:60] if request.method == "GET" else ""
+    arquivadas_na_busca = 0
     if busca:
         veiculos = [v for v in veiculos if veiculo_combina_com_busca(v, busca)]
+        if not ver_arquivadas:
+            arquivadas_na_busca = sum(1 for v in todos if v["arquivado"] and veiculo_combina_com_busca(v, busca))
     fotos = {}
     for foto in db.execute("SELECT id, veiculo_id FROM fotos WHERE momento = 'ENTRADA' ORDER BY id"):
         fotos.setdefault(foto["veiculo_id"], []).append(foto["id"])
-    return render_template("index.html", busca=busca, total_veiculos=total_veiculos,
+    return render_template("index.html", busca=busca, total_veiculos=total_veiculos, arquivado=arquivado,
+                           ver_arquivadas=ver_arquivadas, total_arquivadas=total_arquivadas,
+                           arquivadas_na_busca=arquivadas_na_busca,
                            veiculos=veiculos, fotos=fotos, erros=erros or [],
                            dados=dados or {}, cadastrado=cadastrado, excluido=excluido, max_fotos=MAX_FOTOS,
                            max_mb=MAX_BYTES_FOTO // (1024 * 1024),
@@ -1478,7 +1505,10 @@ def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False):
         for p in db.execute("SELECT ep.* FROM entrega_pecas ep JOIN entrega_itens ei "
                             "ON ei.id = ep.entrega_item_id WHERE ei.entrega_id = ? ORDER BY ep.id", (entrega["id"],)):
             pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
-    return render_template("veiculo.html", passagens=passagens_anteriores(db, veiculo, hoje), max_dado_veiculo=MAX_DADO_VEICULO, max_nome_peca=MAX_NOME_PECA_COMPRA, situacoes_peca=SITUACOES_PECA,
+    arquivamento = (db.execute("SELECT * FROM arquivamentos WHERE veiculo_id = ? AND acao = 'ARQUIVADA' "
+                               "ORDER BY id DESC LIMIT 1", (id,)).fetchone() if veiculo["arquivado"] else None)
+    return render_template("veiculo.html", arquivamento=arquivamento, max_motivo_arquivar=MAX_MOTIVO_ARQUIVAR,
+                           passagens=passagens_anteriores(db, veiculo, hoje), max_dado_veiculo=MAX_DADO_VEICULO, max_nome_peca=MAX_NOME_PECA_COMPRA, situacoes_peca=SITUACOES_PECA,
                            faltam_pecas=faltam_pecas, sites_busca=SITES_BUSCA, max_peca_busca=MAX_PECA_BUSCA,
                            max_referencia=MAX_REFERENCIA, pecas_servicos=pecas_servicos, itens_estoque=itens_estoque,
                            grupos_estoque=grupos_estoque,
@@ -2251,7 +2281,7 @@ def excluir_veiculo(id):
                    "VALUES (?, ?, ?, ?, ?)",
                    (id, veiculo["placa"], veiculo["responsavel"], motivo, g.usuario["nome"]))
         devolver_pecas(db, "veiculo_id = ?", (id,), "Veículo excluído")
-        for tabela in ("fotos", "fotos_historico", "servicos", "aprovacoes", "prazos", "etapas"):
+        for tabela in ("fotos", "fotos_historico", "servicos", "aprovacoes", "prazos", "etapas", "arquivamentos"):
             db.execute(f"DELETE FROM {tabela} WHERE veiculo_id = ?", (id,))
         db.execute("DELETE FROM veiculos WHERE id = ?", (id,))
         db.commit()
@@ -2261,6 +2291,45 @@ def excluir_veiculo(id):
     for codigo in codigos:           # os arquivos só somem depois de gravar no banco
         apagar_arquivos_da_foto(codigo)
     return redirect(url_for("index", excluido=veiculo["placa"]))
+
+
+@app.route("/veiculos/<int:id>/arquivar", methods=["POST"])
+def arquivar_veiculo(id):
+    """Só o dono arquiva uma ficha (cliente que desistiu, carro que não volta mais). A ficha sai da lista
+    principal e vai para "Ver arquivadas"; nada é apagado e dá para desarquivar. O motivo é obrigatório e
+    fica registrado com quem arquivou e quando."""
+    so_dono()
+    db = get_db()
+    veiculo = buscar_veiculo(db, id)
+    motivo = " ".join(request.form.get("motivo", "").split())
+    erros = []
+    if veiculo["arquivado"]:
+        erros.append("Esta ficha já está arquivada.")
+    if sum(1 for letra in motivo if letra.isalpha()) < 3:
+        erros.append("Explique o motivo de arquivar a ficha.")
+    elif len(motivo) > MAX_MOTIVO_ARQUIVAR:
+        erros.append(f"O motivo pode ter no máximo {MAX_MOTIVO_ARQUIVAR} letras.")
+    if erros:
+        return pagina_veiculo(id, erros)
+    db.execute("UPDATE veiculos SET arquivado = 1 WHERE id = ?", (id,))
+    db.execute("INSERT INTO arquivamentos (veiculo_id, acao, motivo, feito_por) VALUES (?, 'ARQUIVADA', ?, ?)",
+               (id, motivo, g.usuario["nome"]))
+    db.commit()
+    return redirect(url_for("index", arquivado=veiculo["placa"]))
+
+
+@app.route("/veiculos/<int:id>/desarquivar", methods=["POST"])
+def desarquivar_veiculo(id):
+    """Só o dono tira a ficha do arquivo: ela volta para a lista principal. Fica registrado."""
+    so_dono()
+    db = get_db()
+    veiculo = buscar_veiculo(db, id)
+    if veiculo["arquivado"]:
+        db.execute("UPDATE veiculos SET arquivado = 0 WHERE id = ?", (id,))
+        db.execute("INSERT INTO arquivamentos (veiculo_id, acao, feito_por) VALUES (?, 'DESARQUIVADA', ?)",
+                   (id, g.usuario["nome"]))
+        db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
 
 
 @app.route("/veiculos/<int:id>/servicos/<int:servico_id>/excluir", methods=["POST"])

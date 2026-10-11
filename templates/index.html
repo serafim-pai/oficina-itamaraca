@@ -17,6 +17,9 @@
     </div>
     {% endif %}
 
+    {% if arquivado %}
+    <div class="ok">Ficha <strong>{{ arquivado }}</strong> arquivada. Para vê-la, use "Ver arquivadas" na lista de veículos.</div>
+    {% endif %}
     {% if excluido %}
     <div class="ok">Veículo <strong>{{ excluido }}</strong> excluído.</div>
     {% endif %}
@@ -78,16 +81,24 @@
         <button type="submit">Cadastrar</button>
     </form>
 
-    <h2 id="veiculos">Veículos cadastrados</h2>
+    <h2 id="veiculos">{{ 'Fichas arquivadas' if ver_arquivadas else 'Veículos cadastrados' }}</h2>
+    {% if ver_arquivadas %}
+    <p><a href="{{ url_for('index') }}#veiculos">&larr; Voltar aos veículos</a></p>
+    {% elif total_arquivadas %}
+    <p><a href="{{ url_for('index', arquivadas=1) }}#veiculos">📁 Ver arquivadas ({{ total_arquivadas }})</a></p>
+    {% endif %}
     {% if total_veiculos %}
     <form method="GET" action="{{ url_for('index') }}#veiculos" class="busca-estoque busca-veiculos">
+        {% if ver_arquivadas %}<input type="hidden" name="arquivadas" value="1">{% endif %}
         <input type="search" name="q" value="{{ busca }}" maxlength="60" aria-label="Buscar veículo"
                placeholder="Buscar por placa ou nome (também marca, modelo, cor ou telefone)">
         <button type="submit">Buscar</button>
-        {% if busca %}<a href="{{ url_for('index') }}#veiculos">Limpar busca</a>{% endif %}
+        {% if busca %}<a href="{{ url_for('index', arquivadas=1 if ver_arquivadas else None) }}#veiculos">Limpar busca</a>{% endif %}
     </form>
-    {% if busca %}<p class="aviso">{{ veiculos|length }} de {{ total_veiculos }} veículos para "{{ busca }}".</p>{% endif %}
+    {% if busca %}<p class="aviso">{{ veiculos|length }} de {{ total_veiculos }} {{ 'fichas arquivadas' if ver_arquivadas else 'veículos' }} para "{{ busca }}".</p>{% endif %}
     {% endif %}
+    {% if arquivadas_na_busca %}<p class="aviso">📁 {{ arquivadas_na_busca }} {{ 'ficha arquivada também combina' if arquivadas_na_busca == 1 else 'fichas arquivadas também combinam' }} com essa busca.
+        <a href="{{ url_for('index', arquivadas=1, q=busca) }}#veiculos">Ver arquivadas</a></p>{% endif %}
     {% if veiculos %}
     <div class="tabela-rolavel">
     <table class="tabela-cartoes veiculos-cartoes">
@@ -134,6 +145,8 @@
     </div>
     {% elif busca %}
     <p>Nenhum veículo encontrado para essa busca. Tente só uma parte do nome ou da placa.</p>
+    {% elif ver_arquivadas %}
+    <p>Nenhuma ficha arquivada.</p>
     {% else %}
     <p>Nenhum veículo cadastrado ainda.</p>
     {% endif %}
