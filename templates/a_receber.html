@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A receber - Oficina Itamaracá</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+    {% include '_menu.html' %}
+    <h1>A receber</h1>
+    <p class="pequeno">Carros já <strong>entregues</strong> com dinheiro ainda por receber, do mais antigo para o mais novo.
+        Para lançar um pagamento, abra a ficha.</p>
+    {% if fichas %}
+    <p><strong>{{ fichas|length }}</strong> {{ 'carro' if fichas|length == 1 else 'carros' }} com saldo, no total de
+        <strong>{{ formatar_dinheiro(total_falta) }}</strong>.</p>
+    <div class="tabela-rolavel">
+    <table class="relatorio">
+        <tr><th>Placa</th><th>Responsável</th><th>Entregue em</th><th class="num">Total</th><th class="num">Recebido</th>
+            <th class="num">Falta</th><th>Cobrar</th></tr>
+        {% for f in fichas %}
+        <tr>
+            <td><a href="{{ url_for('ver_veiculo', id=f['veiculo']['id']) }}#pagamento">{{ f['veiculo']['placa'] }}</a>
+                {% if f['veiculo']['arquivado'] %}<span class="selo">📁 Arquivada</span>{% endif %}</td>
+            <td>{{ f['veiculo']['responsavel'] or '-' }}</td>
+            <td>{{ formatar_data(f['data_entrega']) }}<br><span class="pequeno">{{ 'hoje' if f['dias'] == 0 else ('há 1 dia' if f['dias'] == 1 else 'há ' ~ f['dias'] ~ ' dias') }}</span></td>
+            <td class="num">{{ formatar_dinheiro(f['total']) }}</td>
+            <td class="num">{{ formatar_dinheiro(f['pago']) }}</td>
+            <td class="num"><strong>{{ formatar_dinheiro(f['falta']) }}</strong></td>
+            <td>{% if f['veiculo']['telefone'] %}<a href="{{ f['whatsapp'] }}" target="_blank" rel="noopener">💬 WhatsApp</a>
+                {% else %}<span class="pequeno">sem telefone</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    </div>
+    {% else %}
+    <p>Nenhum carro entregue com saldo. Tudo recebido! 🎉</p>
+    {% endif %}
+</body>
+</html>

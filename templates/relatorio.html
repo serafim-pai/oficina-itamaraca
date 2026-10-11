@@ -55,6 +55,17 @@
     <p>Nenhum carro foi entregue neste mês.</p>
     {% endif %}
 
+    <h2>Recebimentos</h2>
+    <table class="relatorio">
+        <tr><th>Recebido neste mês</th><td class="num"><strong>{{ formatar_dinheiro(dados['recebido']) }}</strong></td></tr>
+        {% for nome, centavos in dados['recebido_por_forma'] %}
+        <tr><th>&nbsp;&nbsp;{{ nome }}</th><td class="num">{{ formatar_dinheiro(centavos) }}</td></tr>
+        {% endfor %}
+        <tr><th>A receber hoje (carros entregues)</th><td class="num">{{ formatar_dinheiro(dados['a_receber_total']) }}</td></tr>
+    </table>
+    <p class="pequeno">Recebido conta pela data do pagamento. {{ dados['a_receber_quantidade'] }} {{ 'carro entregue ainda tem saldo' if dados['a_receber_quantidade'] == 1 else 'carros entregues ainda têm saldo' }}:
+        <a href="{{ url_for('a_receber') }}">ver lista</a>.</p>
+
     <h2>Garantias (hoje)</h2>
     <p><strong>{{ dados['garantias_vigentes'] }}</strong> {{ 'garantia vigente' if dados['garantias_vigentes'] == 1 else 'garantias vigentes' }}.
        {% if dados['garantias_vencendo'] %}Vencem nos próximos {{ dias_aviso }} dias:{% else %}Nenhuma vence nos próximos {{ dias_aviso }} dias.{% endif %}</p>

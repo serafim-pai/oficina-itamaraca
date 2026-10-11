@@ -754,6 +754,59 @@
     <p>Nenhum problema registrado ainda.</p>
     {% endif %}
 
+    {% if pagamento %}
+    <h2 id="pagamento">💰 Pagamento
+        <span class="selo selo-{{ pagamento['chave']|lower|replace('_', '-') }}">{{ pagamento['texto'] }}</span></h2>
+    <table class="relatorio">
+        <tr><th>Total a pagar</th><td class="num">{{ formatar_dinheiro(pagamento['total']) }}</td></tr>
+        <tr><th>Já recebido</th><td class="num">{{ formatar_dinheiro(pagamento['pago']) }}</td></tr>
+        <tr><th>{{ 'Recebido a mais' if pagamento['falta'] < 0 else 'Falta receber' }}</th>
+            <td class="num"><strong>{{ formatar_dinheiro(pagamento['falta']|abs) }}</strong></td></tr>
+    </table>
+    {% for p in pagamento['lista'] %}
+    <div class="lancamento{{ ' pagamento-apagado' if p['apagado_em'] }}">
+        <strong>{{ formatar_dinheiro(p['valor_centavos']) }}</strong> &middot; {{ formas_pagamento.get(p['forma'], p['forma']) }}
+        &middot; {{ formatar_data(p['data_pagamento']) }}{% if p['observacao'] %} &middot; {{ p['observacao'] }}{% endif %}
+        <span class="pequeno">(lançado por {{ p['registrado_por'] }})</span>
+        {% if p['apagado_em'] %}
+        <div class="pequeno">Apagado por {{ p['apagado_por'] }} em {{ p['apagado_em']|hora_brasil }}. Motivo: {{ p['motivo_apagado'] }}</div>
+        {% else %}
+        <details class="apagar-pagamento">
+            <summary>Apagar este pagamento</summary>
+            <form method="POST" action="{{ url_for('apagar_pagamento', id=veiculo['id'], pagamento_id=p['id']) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label for="motivo_pag_{{ p['id'] }}">Motivo de apagar *</label>
+                <input type="text" id="motivo_pag_{{ p['id'] }}" name="motivo" maxlength="{{ max_motivo_pagamento }}">
+                <button type="submit">Apagar o pagamento</button>
+            </form>
+        </details>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% if pagamento['total'] <= 0 %}
+    <p class="pequeno">Informe o valor dos serviços para poder registrar pagamentos.</p>
+    {% elif pagamento['falta'] > 0 %}
+    <details class="telefone-cliente">
+        <summary>➕ Registrar pagamento recebido</summary>
+        <form method="POST" action="{{ url_for('registrar_pagamento', id=veiculo['id']) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="valor_pagamento">Valor recebido (R$) *</label>
+            <input type="text" id="valor_pagamento" name="valor" inputmode="decimal"
+                   value="{{ formatar_dinheiro(pagamento['falta'], False) }}">
+            <label for="forma_pagamento">Forma de pagamento *</label>
+            <select id="forma_pagamento" name="forma">
+                {% for chave, nome in formas_pagamento.items() %}<option value="{{ chave }}">{{ nome }}</option>{% endfor %}
+            </select>
+            <label for="data_pagamento">Data do pagamento</label>
+            <input type="date" id="data_pagamento" name="data" value="{{ hoje_iso }}" max="{{ hoje_iso }}">
+            <label for="obs_pagamento">Observação (opcional)</label>
+            <input type="text" id="obs_pagamento" name="observacao" maxlength="{{ max_obs_pagamento }}" placeholder="Exemplo: sinal, restante, 2 de 3">
+            <button type="submit">Registrar pagamento</button>
+        </form>
+    </details>
+    {% endif %}
+    {% endif %}
+
     {% if usuario and usuario['tipo'] == 'DONO' and not veiculo['arquivado'] %}
     <details class="arquivar-veiculo">
         <summary>Arquivar esta ficha</summary>

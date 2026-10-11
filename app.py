@@ -48,6 +48,10 @@ LIMITES_PADRAO_MESES = {"LATARIA": 12, "PINTURA": 24, "MECÂNICA": 6, "ELÉTRICA
 MAX_LIMITE_MESES = 120                                         # o dono pode ajustar cada limite de 1 a 120 meses
 MAX_MOTIVO_EXCLUIR = 300                                        # letras do motivo de excluir um veículo
 MAX_MOTIVO_ARQUIVAR = 300                                       # letras do motivo de arquivar uma ficha
+MAX_OBS_PAGAMENTO = 100                                         # letras da observação de um pagamento
+MAX_MOTIVO_PAGAMENTO = 300                                      # letras do motivo de apagar um pagamento
+FORMAS_PAGAMENTO = {"PIX": "Pix", "DINHEIRO": "Dinheiro", "DEBITO": "Cartão de débito",
+                    "CREDITO": "Cartão de crédito", "TRANSFERENCIA": "Transferência", "OUTRA": "Outra forma"}
 MAX_MOTIVO_DESFAZER = 300                                      # letras do motivo de desfazer uma entrega
 MAX_CONDICOES = 1500                                           # letras das condições que cancelam a garantia
 # Texto sugerido no fechamento da entrega (o dono pode editar antes de fechar).
@@ -351,6 +355,25 @@ def init_db():
             motivo TEXT,
             feito_por TEXT,
             criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    # Pagamentos recebidos de cada ficha (só o dono lança). Apagar um lançamento errado não remove a linha:
+    # ela fica marcada (quem, quando e por quê) e deixa de contar.
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pagamentos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            veiculo_id INTEGER NOT NULL,
+            data_pagamento TEXT NOT NULL,
+            forma TEXT NOT NULL,
+            valor_centavos INTEGER NOT NULL,
+            observacao TEXT,
+            registrado_por TEXT,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            apagado_em TEXT,
+            apagado_por TEXT,
+            motivo_apagado TEXT
         )
         """
     )
@@ -1507,7 +1530,10 @@ def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False):
             pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
     arquivamento = (db.execute("SELECT * FROM arquivamentos WHERE veiculo_id = ? AND acao = 'ARQUIVADA' "
                                "ORDER BY id DESC LIMIT 1", (id,)).fetchone() if veiculo["arquivado"] else None)
-    return render_template("veiculo.html", arquivamento=arquivamento, max_motivo_arquivar=MAX_MOTIVO_ARQUIVAR,
+    pagamento = dados_de_pagamento(db, id) if g.usuario and g.usuario["tipo"] == "DONO" else None
+    return render_template("veiculo.html", pagamento=pagamento, formas_pagamento=FORMAS_PAGAMENTO,
+                           max_obs_pagamento=MAX_OBS_PAGAMENTO, max_motivo_pagamento=MAX_MOTIVO_PAGAMENTO,
+                           arquivamento=arquivamento, max_motivo_arquivar=MAX_MOTIVO_ARQUIVAR,
                            passagens=passagens_anteriores(db, veiculo, hoje), max_dado_veiculo=MAX_DADO_VEICULO, max_nome_peca=MAX_NOME_PECA_COMPRA, situacoes_peca=SITUACOES_PECA,
                            faltam_pecas=faltam_pecas, sites_busca=SITES_BUSCA, max_peca_busca=MAX_PECA_BUSCA,
                            max_referencia=MAX_REFERENCIA, pecas_servicos=pecas_servicos, itens_estoque=itens_estoque,
@@ -1907,6 +1933,58 @@ def registrar_garantia(id, servico_id):
     return redirect(url_for("ver_veiculo", id=id))
 
 
+def total_devido(db, veiculo_id):
+    """O que o cliente deve pagar: o total da entrega fechada ou, antes dela, o total dos serviços."""
+    entrega = db.execute("SELECT total_centavos FROM entregas WHERE veiculo_id = ?", (veiculo_id,)).fetchone()
+    if entrega:
+        return entrega["total_centavos"]
+    return sum((s["valor_centavos"] or 0) + s["pecas_centavos"] for s in db.execute(
+        "SELECT valor_centavos, pecas_centavos FROM servicos WHERE veiculo_id = ?", (veiculo_id,)))
+
+
+def situacao_pagamento(total, pago):
+    """Devolve (chave, texto) da situação do pagamento de uma ficha."""
+    if pago <= 0:
+        return "SEM_PAGAMENTO", "Sem pagamento"
+    if pago < total:
+        return "PAGO_EM_PARTE", "Pago em parte"
+    if pago == total:
+        return "PAGO", "Pago"
+    return "PAGO_A_MAIS", "Pago a mais"
+
+
+def dados_de_pagamento(db, veiculo_id):
+    """Tudo que a ficha mostra ao dono sobre pagamento: total, recebido, o que falta e os lançamentos."""
+    lista = db.execute("SELECT * FROM pagamentos WHERE veiculo_id = ? ORDER BY id", (veiculo_id,)).fetchall()
+    total = total_devido(db, veiculo_id)
+    pago = sum(p["valor_centavos"] for p in lista if not p["apagado_em"])
+    chave, texto = situacao_pagamento(total, pago)
+    return {"total": total, "pago": pago, "falta": total - pago, "chave": chave, "texto": texto, "lista": lista}
+
+
+def fichas_a_receber(db):
+    """Fichas com a entrega fechada e dinheiro ainda por receber, da entrega mais antiga para a mais nova."""
+    fichas = []
+    for linha in db.execute(
+            "SELECT v.*, e.data_entrega, e.total_centavos AS total, COALESCE((SELECT SUM(p.valor_centavos) "
+            "FROM pagamentos p WHERE p.veiculo_id = v.id AND p.apagado_em IS NULL), 0) AS pago "
+            "FROM entregas e JOIN veiculos v ON v.id = e.veiculo_id ORDER BY e.data_entrega, e.id"):
+        if linha["total"] - linha["pago"] > 0:
+            fichas.append({"veiculo": linha, "data_entrega": linha["data_entrega"], "total": linha["total"],
+                           "pago": linha["pago"], "falta": linha["total"] - linha["pago"]})
+    return fichas
+
+
+def link_whatsapp_cobranca(veiculo, falta):
+    """Link do WhatsApp lembrando o saldo da ficha (a pessoa confere e envia)."""
+    nome = (veiculo["responsavel"] or "").strip()
+    texto = (f"Olá{', ' + nome if nome else ''}! Aqui é da Oficina Itamaracá.\n"
+             f"Consta um saldo de *{formatar_dinheiro(falta)}* do serviço no veículo placa {veiculo['placa']}.\n"
+             "Se já pagou, desconsidere esta mensagem. Obrigado!")
+    base = f"https://wa.me/55{veiculo['telefone']}" if veiculo["telefone"] else "https://wa.me/"
+    return f"{base}?text={quote(texto)}"
+
+
 MESES_EXTENSO = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
                  "outubro", "novembro", "dezembro")
 DIAS_AVISO_GARANTIA = 30             # garantias que vencem nesse prazo aparecem no relatório
@@ -1949,6 +2027,12 @@ def montar_relatorio(db, ano, mes, hoje):
             linha["custo"] += p["quantidade"] * p["custo_centavos"]
             venda += p["quantidade"] * p["preco_centavos"]
             custo += p["quantidade"] * p["custo_centavos"]
+    recebido, por_forma = 0, {}
+    for p in db.execute("SELECT * FROM pagamentos WHERE apagado_em IS NULL AND data_pagamento LIKE ?",
+                        (prefixo + "%",)):
+        recebido += p["valor_centavos"]
+        por_forma[p["forma"]] = por_forma.get(p["forma"], 0) + p["valor_centavos"]
+    pendentes = fichas_a_receber(db)
     limite = (hoje + timedelta(days=DIAS_AVISO_GARANTIA)).isoformat()
     vigentes, vencendo = 0, []
     for i in db.execute("SELECT i.*, e.veiculo_id, v.placa FROM entrega_itens i JOIN entregas e ON e.id = i.entrega_id "
@@ -1964,6 +2048,9 @@ def montar_relatorio(db, ano, mes, hoje):
         "pecas_estoque": sorted(pecas_estoque.values(), key=lambda l: (-l["venda"], l["nome"])),
         "pecas_venda": venda, "pecas_custo": custo, "pecas_lucro": venda - custo,
         "garantias_vigentes": vigentes, "garantias_vencendo": vencendo,
+        "recebido": recebido,
+        "recebido_por_forma": sorted(((FORMAS_PAGAMENTO[f], c) for f, c in por_forma.items()), key=lambda x: -x[1]),
+        "a_receber_total": sum(f["falta"] for f in pendentes), "a_receber_quantidade": len(pendentes),
     }
 
 
@@ -2268,6 +2355,9 @@ def excluir_veiculo(id):
     elif db.execute("SELECT 1 FROM entregas_desfeitas WHERE veiculo_id = ?", (id,)).fetchone():
         erros.append("Este veículo já teve uma entrega (depois desfeita) e não pode ser excluído, "
                      "porque o histórico da entrega precisa ser guardado.")
+    if db.execute("SELECT 1 FROM pagamentos WHERE veiculo_id = ? AND apagado_em IS NULL", (id,)).fetchone():
+        erros.append("Esta ficha tem pagamentos registrados e não pode ser excluída. Apague os pagamentos "
+                     "(com o motivo) antes, se foi engano.")
     if sum(1 for letra in motivo if letra.isalpha()) < 3:
         erros.append("Explique o motivo de excluir o veículo.")
     elif len(motivo) > MAX_MOTIVO_EXCLUIR:
@@ -2281,7 +2371,7 @@ def excluir_veiculo(id):
                    "VALUES (?, ?, ?, ?, ?)",
                    (id, veiculo["placa"], veiculo["responsavel"], motivo, g.usuario["nome"]))
         devolver_pecas(db, "veiculo_id = ?", (id,), "Veículo excluído")
-        for tabela in ("fotos", "fotos_historico", "servicos", "aprovacoes", "prazos", "etapas", "arquivamentos"):
+        for tabela in ("fotos", "fotos_historico", "servicos", "aprovacoes", "prazos", "etapas", "arquivamentos", "pagamentos"):
             db.execute(f"DELETE FROM {tabela} WHERE veiculo_id = ?", (id,))
         db.execute("DELETE FROM veiculos WHERE id = ?", (id,))
         db.commit()
@@ -2291,6 +2381,87 @@ def excluir_veiculo(id):
     for codigo in codigos:           # os arquivos só somem depois de gravar no banco
         apagar_arquivos_da_foto(codigo)
     return redirect(url_for("index", excluido=veiculo["placa"]))
+
+
+@app.route("/veiculos/<int:id>/pagamentos", methods=["POST"])
+def registrar_pagamento(id):
+    """Só o dono lança um pagamento recebido. Pode ser em partes (sinal e resto); o valor não pode passar do
+    que ainda falta receber."""
+    so_dono()
+    db = get_db()
+    buscar_veiculo(db, id)
+    dados = dados_de_pagamento(db, id)
+    valor = interpretar_valor(request.form.get("valor", ""))
+    forma = request.form.get("forma", "")
+    observacao = " ".join(request.form.get("observacao", "").split())
+    texto_data = request.form.get("data", "").strip()
+    hoje = hoje_brasil()
+    data, erros = hoje, []
+    if texto_data:
+        try:
+            data = datetime.strptime(texto_data, "%Y-%m-%d").date()
+        except ValueError:
+            erros.append("A data do pagamento não é válida.")
+        else:
+            if data > hoje:
+                erros.append("A data do pagamento não pode ser no futuro.")
+            elif data.year < 2000:
+                erros.append("A data do pagamento está muito antiga.")
+    if dados["total"] <= 0:
+        erros.append("Esta ficha ainda não tem valor de serviço para receber.")
+    elif valor is None:
+        erros.append("Informe o valor recebido (exemplo: 150,00).")
+    elif valor > dados["falta"]:
+        erros.append(f"O valor passa do que falta receber ({formatar_dinheiro(max(dados['falta'], 0))}).")
+    if forma not in FORMAS_PAGAMENTO:
+        erros.append("Escolha a forma de pagamento.")
+    if len(observacao) > MAX_OBS_PAGAMENTO:
+        erros.append(f"A observação pode ter no máximo {MAX_OBS_PAGAMENTO} letras.")
+    if erros:
+        return pagina_veiculo(id, erros)
+    db.execute("INSERT INTO pagamentos (veiculo_id, data_pagamento, forma, valor_centavos, observacao, registrado_por) "
+               "VALUES (?, ?, ?, ?, ?, ?)", (id, data.isoformat(), forma, valor, observacao, g.usuario["nome"]))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/pagamentos/<int:pagamento_id>/apagar", methods=["POST"])
+def apagar_pagamento(id, pagamento_id):
+    """Só o dono apaga um pagamento lançado errado. O motivo é obrigatório; a linha fica guardada, marcada como
+    apagada (quem, quando e por quê), e deixa de contar."""
+    so_dono()
+    db = get_db()
+    buscar_veiculo(db, id)
+    pagamento = db.execute("SELECT * FROM pagamentos WHERE id = ? AND veiculo_id = ? AND apagado_em IS NULL",
+                           (pagamento_id, id)).fetchone()
+    if not pagamento:
+        abort(404)
+    motivo = " ".join(request.form.get("motivo", "").split())
+    erros = []
+    if sum(1 for letra in motivo if letra.isalpha()) < 3:
+        erros.append("Explique o motivo de apagar o pagamento.")
+    elif len(motivo) > MAX_MOTIVO_PAGAMENTO:
+        erros.append(f"O motivo pode ter no máximo {MAX_MOTIVO_PAGAMENTO} letras.")
+    if erros:
+        return pagina_veiculo(id, erros)
+    db.execute("UPDATE pagamentos SET apagado_em = CURRENT_TIMESTAMP, apagado_por = ?, motivo_apagado = ? WHERE id = ?",
+               (g.usuario["nome"], motivo, pagamento_id))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/a-receber")
+def a_receber():
+    """Só o dono: carros já entregues com dinheiro ainda por receber, do mais antigo para o mais novo."""
+    so_dono()
+    hoje = hoje_brasil()
+    fichas = fichas_a_receber(get_db())
+    for f in fichas:
+        f["dias"] = (hoje - date.fromisoformat(f["data_entrega"])).days
+        f["whatsapp"] = link_whatsapp_cobranca(f["veiculo"], f["falta"])
+    return render_template("a_receber.html", fichas=fichas, total_falta=sum(f["falta"] for f in fichas),
+                           formatar_data=formatar_data, formatar_dinheiro=formatar_dinheiro,
+                           formatar_telefone=formatar_telefone)
 
 
 @app.route("/veiculos/<int:id>/arquivar", methods=["POST"])

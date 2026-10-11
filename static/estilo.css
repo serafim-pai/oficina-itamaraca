@@ -316,3 +316,13 @@ table.relatorio tr.total td { font-weight: bold; background: #eef2f8; }
                    padding: 8px 12px; margin: 10px 0; }
 .ficha-arquivada form { margin-top: 6px; }
 details.arquivar-veiculo { border: 1px solid #c9d3e3; border-radius: 4px; padding: 8px 12px; background: #f4f6fa; margin: 24px 0 0; }
+
+.selo-sem-pagamento { background: #e5e5e5; color: #555; }
+.selo-pago-em-parte { background: #fff3cd; color: #5c4400; }
+.selo-pago { background: #d4edda; color: #155724; }
+.selo-pago-a-mais { background: #cfe2ff; color: #0a3d91; }
+.lancamento { border-top: 1px solid #d9e0ec; padding: 6px 0; }
+.lancamento.pagamento-apagado { color: #777; }
+.lancamento.pagamento-apagado strong { text-decoration: line-through; }
+.lancamento .pequeno { color: #555; font-size: 12px; }
+details.apagar-pagamento { margin: 4px 0; font-size: 14px; }
