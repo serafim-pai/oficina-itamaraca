@@ -835,6 +835,27 @@
     <p>Nenhum problema registrado ainda.</p>
     {% endif %}
 
+    {% if avisos_da_ficha %}
+    <h2 id="avisos-feitos">📣 Avisos feitos</h2>
+    <p class="pequeno">Cada "Avisei" ou "Não avisar mais" da tela de Avisos fica aqui.
+        {% if usuario and usuario['tipo'] == 'DONO' %}Se clicou por engano, o dono pode desfazer e o cliente volta para a lista.{% endif %}</p>
+    {% for a in avisos_da_ficha %}
+    <div class="lancamento{{ ' pagamento-apagado' if a['desfeito_em'] }}">
+        <strong>{{ descrever_aviso(a) }}</strong> &middot; {{ a['criado_em']|hora_brasil }}
+        <span class="pequeno">(por {{ a['feito_por'] }})</span>
+        {% if a['desfeito_em'] %}
+        <div class="pequeno">Desfeito por {{ a['desfeito_por'] }} em {{ a['desfeito_em']|hora_brasil }}.</div>
+        {% elif usuario and usuario['tipo'] == 'DONO' %}
+        <form method="POST" action="{{ url_for('desfazer_aviso', id=veiculo['id'], aviso_id=a['id']) }}"
+              onsubmit="return confirm('Desfazer este aviso? O cliente volta para a lista de avisos.')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="botao-pequeno">Desfazer</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
     {% if pagamento %}
     <h2 id="pagamento">💰 Pagamento
         <span class="selo selo-{{ pagamento['chave']|lower|replace('_', '-') }}">{{ pagamento['texto'] }}</span></h2>

@@ -407,6 +407,10 @@ def init_db():
         )
         """
     )
+    colunas_avisos = [c[1] for c in db.execute("PRAGMA table_info(avisos)")]
+    for coluna in ("desfeito_em", "desfeito_por"):
+        if coluna not in colunas_avisos:
+            db.execute(f"ALTER TABLE avisos ADD COLUMN {coluna} TEXT")
     # Comissão: profissionais (nome e percentual sobre a mão de obra). O percentual muda só para serviços futuros;
     # na entrega, cada serviço guarda o profissional e o percentual da hora (entrega_itens).
     db.execute(
@@ -1615,7 +1619,9 @@ def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False, destacar_
     pagamento = dados_de_pagamento(db, id) if g.usuario and g.usuario["tipo"] == "DONO" else None
     todos_profissionais = (db.execute("SELECT * FROM profissionais ORDER BY nome").fetchall()
                            if g.usuario and g.usuario["tipo"] == "DONO" else [])
-    return render_template("veiculo.html", profissionais_ativos=[p for p in todos_profissionais if p["ativo"]],
+    return render_template("veiculo.html", avisos_da_ficha=db.execute(
+                               "SELECT * FROM avisos WHERE veiculo_id = ? ORDER BY id", (id,)).fetchall(),
+                           descrever_aviso=descrever_aviso, profissionais_ativos=[p for p in todos_profissionais if p["ativo"]],
                            profissional_nomes={p["id"]: p["nome"] for p in todos_profissionais},
                            conf=conferencia(veiculo), tem_luzes=tem_luzes_acesas(veiculo),
                            luzes_painel=LUZES_PAINEL, combustiveis=COMBUSTIVEIS, itens_deixados=ITENS_DEIXADOS,
@@ -2177,6 +2183,17 @@ def texto_do_aviso(aviso):
             "Responda esta mensagem para combinar o melhor dia. Obrigado!")
 
 
+def descrever_aviso(aviso):
+    """Nome de um aviso já feito, para a lista da ficha."""
+    if aviso["tipo"] == "REVISAO":
+        return f"Revisão de {aviso['marca_meses']} meses"
+    if aviso["tipo"] == "ANIVERSARIO":
+        return f"Aniversário de {aviso['marca_meses']}"
+    if aviso["tipo"] == "GARANTIA":
+        return "Garantia vencendo"
+    return "Não avisar mais"
+
+
 def montar_avisos(db, hoje):
     """Clientes para avisar pelo WhatsApp. Duas situações, por ficha entregue:
     - REVISAO: de 3 em 3 meses depois da entrega, enquanto durar a garantia mais longa da ficha;
@@ -2188,7 +2205,7 @@ def montar_avisos(db, hoje):
         chave = normalizar(v["placa"])
         ultima_ficha[chave] = max(ultima_ficha.get(chave, 0), v["id"])
     avisos_feitos = {}
-    for a in db.execute("SELECT * FROM avisos"):
+    for a in db.execute("SELECT * FROM avisos WHERE desfeito_em IS NULL"):
         avisos_feitos.setdefault(a["veiculo_id"], []).append(a)
     lista = []
     for ficha in db.execute("SELECT v.*, e.id AS entrega_id, e.data_entrega FROM entregas e "
@@ -2962,6 +2979,23 @@ def registrar_profissional(id, servico_id):
     db.execute("UPDATE servicos SET profissional_id = ? WHERE id = ?", (novo, servico_id))
     db.commit()
     return redirect(url_for("ver_veiculo", id=id))
+
+
+@app.route("/veiculos/<int:id>/avisos/<int:aviso_id>/desfazer", methods=["POST"])
+def desfazer_aviso(id, aviso_id):
+    """Só o dono desfaz um "Avisei" ou "Não avisar mais" clicado por engano: o cliente volta para a lista de avisos.
+    A linha não some: fica marcada como desfeita (quem e quando)."""
+    so_dono()
+    db = get_db()
+    buscar_veiculo(db, id)
+    aviso = db.execute("SELECT * FROM avisos WHERE id = ? AND veiculo_id = ? AND desfeito_em IS NULL",
+                       (aviso_id, id)).fetchone()
+    if not aviso:
+        abort(404)
+    db.execute("UPDATE avisos SET desfeito_em = CURRENT_TIMESTAMP, desfeito_por = ? WHERE id = ?",
+               (g.usuario["nome"], aviso_id))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id) + "#avisos-feitos")
 
 
 @app.route("/veiculos/<int:id>/arquivar", methods=["POST"])
