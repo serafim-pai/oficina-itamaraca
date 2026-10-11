@@ -331,3 +331,5 @@ details.apagar-pagamento { margin: 4px 0; font-size: 14px; }
 .selo-garantia-aviso { background: #fff3cd; color: #5c4400; }
 .avisos-acoes form { display: inline-block; margin: 2px 4px 2px 0; }
 .avisos-acoes .secundario { background: #6b7280; }
+
+.selo-aniversario { background: #fde2f3; color: #8a1c5f; }

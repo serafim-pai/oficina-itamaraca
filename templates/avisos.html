@@ -10,7 +10,7 @@
     {% include '_menu.html' %}
     <h1>Avisos aos clientes</h1>
     <p class="pequeno">Clientes para avisar pelo WhatsApp: <strong>revisão de {{ intervalo }} em {{ intervalo }} meses</strong>
-        depois da entrega, enquanto durar a garantia, e <strong>garantia vencendo</strong> nos próximos {{ dias_garantia }} dias.
+        depois da entrega, enquanto durar a garantia, <strong>garantia vencendo</strong> nos próximos {{ dias_garantia }} dias e <strong>aniversariantes do mês</strong> (brinde: {{ brinde }}).
         Clique em <strong>WhatsApp</strong>, confira a mensagem e envie. Depois clique em <strong>Avisei</strong> para o cliente
         sair da lista até o próximo aviso. Carro que já voltou à oficina não aparece.</p>
     {% if avisos %}
@@ -21,13 +21,14 @@
         {% for a in avisos %}
         <tr>
             <td>{% if a['tipo'] == 'REVISAO' %}<span class="selo selo-revisao">Revisão de {{ a['marca_meses'] }} meses</span>
+                {% elif a['tipo'] == 'ANIVERSARIO' %}<span class="selo selo-aniversario">🎂 Aniversário</span>
                 {% else %}<span class="selo selo-garantia-aviso">Garantia vencendo</span>{% endif %}</td>
             <td><a href="{{ url_for('ver_veiculo', id=a['veiculo']['id']) }}">{{ a['veiculo']['placa'] }}</a><br>
                 <span class="pequeno">{{ a['veiculo']['marca'] or '' }} {{ a['veiculo']['modelo'] or '' }}</span></td>
             <td>{{ a['veiculo']['responsavel'] or '-' }}<br>
                 <span class="pequeno">{{ formatar_telefone(a['veiculo']['telefone']) if a['veiculo']['telefone'] else 'sem telefone' }}</span></td>
             <td>{{ formatar_data(a['data'].isoformat()) }}<br>
-                <span class="pequeno">{% if a['dias'] < 0 %}atrasado {{ -a['dias'] }} {{ 'dia' if a['dias'] == -1 else 'dias' }}{% elif a['dias'] == 0 %}hoje{% else %}em {{ a['dias'] }} {{ 'dia' if a['dias'] == 1 else 'dias' }}{% endif %}</span></td>
+                <span class="pequeno">{% if a['tipo'] == 'ANIVERSARIO' and a['dias'] < 0 %}fez aniversário há {{ -a['dias'] }} {{ 'dia' if a['dias'] == -1 else 'dias' }}{% elif a['dias'] < 0 %}atrasado {{ -a['dias'] }} {{ 'dia' if a['dias'] == -1 else 'dias' }}{% elif a['dias'] == 0 %}hoje{% else %}em {{ a['dias'] }} {{ 'dia' if a['dias'] == 1 else 'dias' }}{% endif %}</span></td>
             <td class="avisos-acoes">
                 {% if a['veiculo']['telefone'] %}<a href="{{ a['whatsapp'] }}" target="_blank" rel="noopener">💬 WhatsApp</a><br>{% endif %}
                 <form method="POST" action="{{ url_for('registrar_aviso', id=a['veiculo']['id']) }}">

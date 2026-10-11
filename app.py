@@ -51,6 +51,7 @@ MAX_MOTIVO_ARQUIVAR = 300                                       # letras do moti
 INTERVALO_REVISAO_MESES = 3          # de quanto em quanto tempo avisar o cliente, enquanto durar a garantia
 DIAS_ANTECEDENCIA_AVISO = 7          # o aviso entra na lista alguns dias antes da data
 DIAS_VALIDADE_AVISO = 90             # aviso de revisão com mais atraso que isso sai da lista (vale a próxima marca)
+BRINDE_ANIVERSARIO = "revisão geral, alinhamento e balanceamento grátis"   # presente do mês de aniversário
 MAX_OBS_PAGAMENTO = 100                                         # letras da observação de um pagamento
 MAX_MOTIVO_PAGAMENTO = 300                                      # letras do motivo de apagar um pagamento
 FORMAS_PAGAMENTO = {"PIX": "Pix", "DINHEIRO": "Dinheiro", "DEBITO": "Cartão de débito",
@@ -543,6 +544,9 @@ def init_db():
     if "motor" not in colunas_veiculos:
         db.execute("ALTER TABLE veiculos ADD COLUMN motor TEXT")
     # Ficha arquivada (1) some da lista principal; só o dono arquiva e desarquiva
+    # Data de nascimento do responsável (opcional, AAAA-MM-DD): só para o brinde do mês de aniversário
+    if "data_nascimento" not in colunas_veiculos:
+        db.execute("ALTER TABLE veiculos ADD COLUMN data_nascimento TEXT")
     if "arquivado" not in colunas_veiculos:
         db.execute("ALTER TABLE veiculos ADD COLUMN arquivado INTEGER NOT NULL DEFAULT 0")
     # Fotos da entrega: "momento" diz quando a foto foi tirada. ENTRADA (as que já existiam), ENTREGA, ou
@@ -1385,11 +1389,15 @@ def cadastrar_veiculo():
     dados["chassi"], erro_chassi = interpretar_chassi(request.form.get("chassi", ""))
     telefone, erro_telefone = normalizar_telefone(request.form.get("telefone", ""))
     dados["telefone"] = request.form.get("telefone", "").strip()
+    dados["data_nascimento"] = request.form.get("data_nascimento", "").strip()
+    nascimento, erro_nascimento = interpretar_nascimento(dados["data_nascimento"], hoje_brasil())
     documento_deixado = request.form.get("documento_deixado") == "on"
 
     erros = []
     if erro_telefone:
         erros.append(erro_telefone)
+    if erro_nascimento:
+        erros.append(erro_nascimento)
     if erro_chassi:
         erros.append(erro_chassi)
     if len(dados["motor"]) > MAX_DADO_VEICULO:
@@ -1426,8 +1434,9 @@ def cadastrar_veiculo():
         cursor = db.execute(
             """
             INSERT INTO veiculos
-                (responsavel, placa, marca, modelo, cor, ano, quilometragem, documento_deixado, telefone, chassi, motor)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (responsavel, placa, marca, modelo, cor, ano, quilometragem, documento_deixado, telefone, chassi, motor,
+                 data_nascimento)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 dados["responsavel"],
@@ -1441,6 +1450,7 @@ def cadastrar_veiculo():
                 telefone,
                 dados["chassi"] or None,
                 dados["motor"] or None,
+                nascimento,
             ),
         )
         guardar_fotos(db, cursor.lastrowid, preparadas, criados)
@@ -2002,16 +2012,20 @@ def link_whatsapp_cobranca(veiculo, falta):
     return f"{base}?text={quote(texto)}"
 
 
-def somar_meses(data, meses):
-    """A mesma data daqui a N meses (dia 31 em mês curto vira o último dia do mês)."""
-    ano, mes = divmod(data.month - 1 + meses, 12)
-    ano, mes = data.year + ano, mes + 1
-    dia = data.day
-    while True:
-        try:
-            return date(ano, mes, dia)
-        except ValueError:
-            dia -= 1
+def interpretar_nascimento(texto, hoje):
+    """Lê a data de nascimento digitada ('AAAA-MM-DD'). Vazio é permitido. Devolve (data ISO ou None, erro ou None)."""
+    texto = (texto or "").strip()
+    if not texto:
+        return None, None
+    try:
+        data = datetime.strptime(texto, "%Y-%m-%d").date()
+    except ValueError:
+        return None, "A data de nascimento não é válida."
+    if data > hoje:
+        return None, "A data de nascimento não pode ser no futuro."
+    if data.year < 1900:
+        return None, "A data de nascimento está muito antiga."
+    return data.isoformat(), None
 
 
 def texto_do_aviso(aviso):
@@ -2024,7 +2038,13 @@ def texto_do_aviso(aviso):
     if aviso["tipo"] == "GARANTIA":
         return (abertura + f"A garantia do serviço de {aviso['servicos']} no seu veículo {alvo} vence em "
                 f"{formatar_data(aviso['garantia_ate'])}. Se notar qualquer problema, traga o carro antes dessa "
-                "data para avaliarmos sem custo de diagnóstico.\nQualquer dúvida, é só responder esta mensagem.")
+                "data para avaliarmos.\nQualquer dúvida, é só responder esta mensagem.")
+    if aviso["tipo"] == "ANIVERSARIO":
+        fim_do_mes = somar_meses(aviso["data"].replace(day=1), 1) - timedelta(days=1)
+        return (abertura + "🎂 *Feliz aniversário!* Neste mês de aniversário a Oficina Itamaracá quer te dar um "
+                f"presente: {BRINDE_ANIVERSARIO} para o seu veículo {alvo}.\n"
+                f"O brinde vale até {formatar_data(fim_do_mes.isoformat())}.\n"
+                "Responda esta mensagem para combinar o melhor dia. Obrigado!")
     return (abertura + f"Já faz {aviso['marca_meses']} meses desde o último serviço no seu veículo {alvo}.\n"
             "Que tal passar aqui para uma revisão? Aproveitamos para trocar óleo e filtros e conferir se "
             "apareceu algum problema.\n"
@@ -2075,6 +2095,20 @@ def montar_avisos(db, hoje):
             lista.append({"veiculo": ficha, "tipo": "GARANTIA", "marca_meses": 0,
                           "data": date.fromisoformat(proxima["garantia_ate"]), "garantia_ate": proxima["garantia_ate"],
                           "servicos": proxima["tipo"]})
+    pessoas = {}                     # cada pessoa uma vez só, mesmo com várias fichas (telefone, ou nome + nascimento)
+    for v in db.execute("SELECT * FROM veiculos WHERE data_nascimento IS NOT NULL AND arquivado = 0 ORDER BY id"):
+        chave = v["telefone"] or (normalizar(v["responsavel"]) + v["data_nascimento"] if v["responsavel"] else f"ficha{v['id']}")
+        pessoas.setdefault(chave, []).append(v)
+    for fichas in pessoas.values():
+        ficha = fichas[-1]           # a ficha mais nova da pessoa
+        nascimento = date.fromisoformat(ficha["data_nascimento"])
+        feitos = [a for f in fichas for a in avisos_feitos.get(f["id"], [])]
+        if nascimento.month != hoje.month or any(a["tipo"] == "NAO_AVISAR" for a in avisos_feitos.get(ficha["id"], [])):
+            continue
+        if any(a["tipo"] == "ANIVERSARIO" and a["marca_meses"] == hoje.year for a in feitos):
+            continue
+        lista.append({"veiculo": ficha, "tipo": "ANIVERSARIO", "marca_meses": hoje.year,
+                      "data": somar_meses(nascimento, 12 * (hoje.year - nascimento.year)), "garantia_ate": None})
     for aviso in lista:
         aviso["dias"] = (aviso["data"] - hoje).days
         telefone = aviso["veiculo"]["telefone"]
@@ -2434,6 +2468,19 @@ def registrar_telefone(id):
     return redirect(url_for("ver_veiculo", id=id))
 
 
+@app.route("/veiculos/<int:id>/nascimento", methods=["POST"])
+def registrar_nascimento(id):
+    """Dono e funcionário informam ou corrigem a data de nascimento do responsável. Pode ficar vazia."""
+    db = get_db()
+    buscar_veiculo(db, id)
+    nascimento, erro = interpretar_nascimento(request.form.get("data_nascimento", ""), hoje_brasil())
+    if erro:
+        return pagina_veiculo(id, [erro])
+    db.execute("UPDATE veiculos SET data_nascimento = ? WHERE id = ?", (nascimento, id))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
+
+
 @app.route("/veiculos/<int:id>/excluir", methods=["POST"])
 def excluir_veiculo(id):
     """Só o dono exclui um veículo cadastrado por engano ou de teste. O motivo é obrigatório.
@@ -2567,21 +2614,21 @@ def avisos():
     """Clientes para avisar pelo WhatsApp (revisão e garantia vencendo). Dono e funcionário veem; não mostra dinheiro."""
     lista = montar_avisos(get_db(), hoje_brasil())
     return render_template("avisos.html", avisos=lista, formatar_data=formatar_data,
-                           intervalo=INTERVALO_REVISAO_MESES, dias_garantia=DIAS_AVISO_GARANTIA,
+                           intervalo=INTERVALO_REVISAO_MESES, dias_garantia=DIAS_AVISO_GARANTIA, brinde=BRINDE_ANIVERSARIO,
                            formatar_telefone=formatar_telefone)
 
 
 @app.route("/veiculos/<int:id>/avisos", methods=["POST"])
 def registrar_aviso(id):
     """Clique em "Avisei" ou "Não avisar mais". O servidor confere qual aviso está pendente na ficha, em vez de
-    confiar no que veio do formulário."""
+    confiar no que veio do formulário. No aviso de aniversário, marca_meses guarda o ANO avisado."""
     db = get_db()
     buscar_veiculo(db, id)
     tipo = request.form.get("tipo", "")
     if tipo == "NAO_AVISAR":
         db.execute("INSERT INTO avisos (veiculo_id, tipo, feito_por) VALUES (?, 'NAO_AVISAR', ?)",
                    (id, g.usuario["nome"]))
-    elif tipo in ("REVISAO", "GARANTIA"):
+    elif tipo in ("REVISAO", "GARANTIA", "ANIVERSARIO"):
         pendente = next((a for a in montar_avisos(db, hoje_brasil())
                          if a["veiculo"]["id"] == id and a["tipo"] == tipo), None)
         if pendente:

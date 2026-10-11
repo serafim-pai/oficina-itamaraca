@@ -34,7 +34,8 @@
         <strong>Motor:</strong> {{ veiculo['motor'] or '-' }}<br>
         <strong>Km:</strong> {{ veiculo['quilometragem'] or '-' }}<br>
         <strong>Chassi:</strong> {{ veiculo['chassi'] or '-' }}<br>
-        <strong>WhatsApp:</strong> {{ formatar_telefone(veiculo['telefone']) }}
+        <strong>WhatsApp:</strong> {{ formatar_telefone(veiculo['telefone']) }}<br>
+        <strong>Nascimento:</strong> {{ formatar_data(veiculo['data_nascimento']) if veiculo['data_nascimento'] else '-' }}
     </p>
     <details class="telefone-cliente">
         <summary>{{ 'Alterar' if veiculo['telefone'] else 'Informar' }} o WhatsApp do cliente</summary>
@@ -43,6 +44,16 @@
             <label for="telefone">WhatsApp do cliente (com DDD; deixe vazio para apagar)</label>
             <input type="tel" id="telefone" name="telefone" inputmode="tel" placeholder="(81) 98765-4321"
                    value="{{ formatar_telefone(veiculo['telefone']) if veiculo['telefone'] else '' }}">
+            <button type="submit">Salvar</button>
+        </form>
+    </details>
+    <details class="telefone-cliente">
+        <summary>🎂 {{ 'Alterar' if veiculo['data_nascimento'] else 'Informar' }} a data de nascimento do cliente</summary>
+        <form method="POST" action="{{ url_for('registrar_nascimento', id=veiculo['id']) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="data_nascimento">Data de nascimento do responsável (deixe vazia para apagar)</label>
+            <input type="date" id="data_nascimento" name="data_nascimento" value="{{ veiculo['data_nascimento'] or '' }}">
+            <span class="aviso">Serve só para oferecer o brinde no mês de aniversário. Peça a autorização do cliente.</span>
             <button type="submit">Salvar</button>
         </form>
     </details>

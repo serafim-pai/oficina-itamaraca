@@ -67,6 +67,10 @@
         <input type="tel" id="telefone" name="telefone" inputmode="tel" placeholder="(81) 98765-4321" value="{{ dados.get('telefone', '') }}">
         <span class="aviso">Com DDD. Serve para enviar o orçamento pelo WhatsApp.</span>
 
+        <label for="data_nascimento">Data de nascimento do responsável (opcional)</label>
+        <input type="date" id="data_nascimento" name="data_nascimento" value="{{ dados.get('data_nascimento', '') }}">
+        <span class="aviso">Serve só para oferecer o brinde no mês de aniversário. Peça a autorização do cliente.</span>
+
         <label for="fotos">Fotos do veículo (opcional)</label>
         <input type="file" id="fotos" name="fotos" accept="image/*" multiple>
         <span class="aviso">Até {{ max_fotos }} fotos de {{ max_mb }} MB cada (JPG, PNG, WEBP ou GIF). Dá para tirar pela câmera do celular.</span>
