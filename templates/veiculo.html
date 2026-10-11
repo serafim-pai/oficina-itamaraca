@@ -270,6 +270,7 @@
             <th>Peças e tintas</th>
             <th>Garantia</th>
             <th>Registrado por</th>
+            {% if usuario and usuario['tipo'] == 'DONO' %}<th>Executado por</th>{% endif %}
             <th>Data</th>
             {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}<th></th>{% endif %}
         </tr>
@@ -483,6 +484,25 @@
                 {% endif %}
             </td>
             <td data-label="Registrado por">{{ s['registrado_por'] }}</td>
+            {% if usuario and usuario['tipo'] == 'DONO' %}
+            <td data-label="Executado por">
+                {% if not entrega %}
+                <form method="POST" action="{{ url_for('registrar_profissional', id=veiculo['id'], servico_id=s['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <select name="profissional_id" aria-label="Quem executou o serviço">
+                        <option value="">Sem profissional</option>
+                        {% for p in profissionais_ativos %}
+                        <option value="{{ p['id'] }}" {{ 'selected' if s['profissional_id'] == p['id'] }}>{{ p['nome'] }}</option>
+                        {% endfor %}
+                        {% if s['profissional_id'] and s['profissional_id'] not in profissionais_ativos|map(attribute='id')|list %}
+                        <option value="{{ s['profissional_id'] }}" selected>{{ profissional_nomes.get(s['profissional_id'], '?') }} (inativo)</option>
+                        {% endif %}
+                    </select>
+                    <button type="submit">Salvar</button>
+                </form>
+                {% else %}{{ profissional_nomes.get(s['profissional_id'], '-') if s['profissional_id'] else '-' }}{% endif %}
+            </td>
+            {% endif %}
             <td data-label="Data">{{ s['criado_em']|hora_brasil }}</td>
             {% if usuario and usuario['tipo'] == 'DONO' and not entrega %}
             <td class="acoes" data-label="">

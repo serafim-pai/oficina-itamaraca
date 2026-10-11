@@ -341,3 +341,9 @@ fieldset.luzes-painel label.luz input { width: auto; margin-right: 6px; }
 h3.conferencia-titulo { margin: 18px 0 2px; color: #1a3c6e; }
 .comprovante .avarias-termo { white-space: pre-line; border: 1px solid #1a3c6e; border-radius: 4px; padding: 8px 12px;
                               background: #fafbfd; }
+
+.navegacao-mes-comissao a { margin-right: 14px; }
+details.comissao-detalhe { margin: 4px 0 12px; }
+details.comissao-detalhe summary { cursor: pointer; font-weight: bold; }
+.profissional-linha form { display: inline-block; margin: 2px 6px 2px 0; }
+.profissional-inativo { color: #777; }

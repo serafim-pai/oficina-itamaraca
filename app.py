@@ -63,6 +63,7 @@ COLUNAS_CONFERENCIA = ("luzes_painel", "luzes_outra", "combustivel", "itens_deix
 MAX_LUZ_OUTRA = 60                   # letras do nome da outra luz
 MAX_ITENS_OUTROS = 100               # letras dos outros pertences deixados no carro
 MAX_AVARIAS = 500                    # letras das avarias que o carro já tinha
+MAX_NOME_PROFISSIONAL = 60            # letras do nome de um profissional (comissão)
 MAX_OBS_PAGAMENTO = 100                                         # letras da observação de um pagamento
 MAX_MOTIVO_PAGAMENTO = 300                                      # letras do motivo de apagar um pagamento
 FORMAS_PAGAMENTO = {"PIX": "Pix", "DINHEIRO": "Dinheiro", "DEBITO": "Cartão de débito",
@@ -83,7 +84,7 @@ TRAVADOS_APOS_ENTREGA = {"registrar_servico", "registrar_resolucao", "registrar_
                          "registrar_aprovacao", "registrar_prazo", "registrar_garantia", "fechar_entrega",
                          "adicionar_fotos", "excluir_foto", "trocar_foto",
                          "adicionar_fotos_problema", "excluir_foto_problema", "registrar_etapa",
-                         "usar_peca", "devolver_peca", "registrar_referencia", "registrar_dados_veiculo", "registrar_conferencia",
+                         "usar_peca", "devolver_peca", "registrar_referencia", "registrar_dados_veiculo", "registrar_profissional", "registrar_conferencia",
                          "editar_problema"}
 MAX_DADO_VEICULO = 40                # letras de marca, modelo, cor e quilometragem do veículo
 MAX_PECA_BUSCA = 100                 # letras do nome da peça pesquisada na Web
@@ -406,6 +407,19 @@ def init_db():
         )
         """
     )
+    # Comissão: profissionais (nome e percentual sobre a mão de obra). O percentual muda só para serviços futuros;
+    # na entrega, cada serviço guarda o profissional e o percentual da hora (entrega_itens).
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS profissionais (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            percentual_bp INTEGER NOT NULL,
+            ativo INTEGER NOT NULL DEFAULT 1,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
     # História 9: estoque de peças e tintas. Cada item guarda quantidade (inteira), mínimo para o aviso de estoque
     # baixo, custo e preço de venda (em centavos). Toda mudança de quantidade vira uma linha em
     # estoque_movimentos (nunca apagada): quem, quando e por quê.
@@ -562,6 +576,15 @@ def init_db():
     for coluna in COLUNAS_CONFERENCIA + ("criado_em",):
         if coluna not in colunas_veiculos:
             db.execute(f"ALTER TABLE veiculos ADD COLUMN {coluna} TEXT")
+    if "profissional_id" not in [c[1] for c in db.execute("PRAGMA table_info(servicos)")]:
+        db.execute("ALTER TABLE servicos ADD COLUMN profissional_id INTEGER")
+    colunas_itens = [c[1] for c in db.execute("PRAGMA table_info(entrega_itens)")]
+    if "profissional_id" not in colunas_itens:
+        db.execute("ALTER TABLE entrega_itens ADD COLUMN profissional_id INTEGER")
+    if "profissional_nome" not in colunas_itens:
+        db.execute("ALTER TABLE entrega_itens ADD COLUMN profissional_nome TEXT")
+    if "comissao_bp" not in colunas_itens:
+        db.execute("ALTER TABLE entrega_itens ADD COLUMN comissao_bp INTEGER")
     if "arquivado" not in colunas_veiculos:
         db.execute("ALTER TABLE veiculos ADD COLUMN arquivado INTEGER NOT NULL DEFAULT 0")
     # Fotos da entrega: "momento" diz quando a foto foi tirada. ENTRADA (as que já existiam), ENTREGA, ou
@@ -1587,7 +1610,11 @@ def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False):
     arquivamento = (db.execute("SELECT * FROM arquivamentos WHERE veiculo_id = ? AND acao = 'ARQUIVADA' "
                                "ORDER BY id DESC LIMIT 1", (id,)).fetchone() if veiculo["arquivado"] else None)
     pagamento = dados_de_pagamento(db, id) if g.usuario and g.usuario["tipo"] == "DONO" else None
-    return render_template("veiculo.html", conf=conferencia(veiculo), tem_luzes=tem_luzes_acesas(veiculo),
+    todos_profissionais = (db.execute("SELECT * FROM profissionais ORDER BY nome").fetchall()
+                           if g.usuario and g.usuario["tipo"] == "DONO" else [])
+    return render_template("veiculo.html", profissionais_ativos=[p for p in todos_profissionais if p["ativo"]],
+                           profissional_nomes={p["id"]: p["nome"] for p in todos_profissionais},
+                           conf=conferencia(veiculo), tem_luzes=tem_luzes_acesas(veiculo),
                            luzes_painel=LUZES_PAINEL, combustiveis=COMBUSTIVEIS, itens_deixados=ITENS_DEIXADOS,
                            max_luz_outra=MAX_LUZ_OUTRA, max_itens_outros=MAX_ITENS_OUTROS, max_avarias=MAX_AVARIAS,
                            pagamento=pagamento, formas_pagamento=FORMAS_PAGAMENTO,
@@ -2211,6 +2238,72 @@ def montar_avisos(db, hoje):
     return sorted(lista, key=lambda a: (a["data"], a["veiculo"]["id"]))
 
 
+def interpretar_percentual(texto):
+    """Lê um percentual digitado ('30', '12,5', '7.25%'). Devolve centésimos de ponto percentual (30% = 3000)
+    ou None se for inválido (vazio, letras, zero, mais de 100 ou mais de 2 casas decimais)."""
+    texto = (texto or "").strip().replace("%", "").replace(" ", "").replace(",", ".")
+    inteiro, ponto, decimais = texto.partition(".")
+    if not inteiro.isdigit() or (ponto and not decimais.isdigit()) or len(decimais) > 2:
+        return None
+    valor = int(inteiro) * 100 + int(decimais.ljust(2, "0") or 0)
+    return valor if 0 < valor <= 10000 else None
+
+
+def texto_percentual(bp):
+    """3000 vira '30%', 1250 vira '12,5%'."""
+    if bp is None:
+        return "-"
+    texto = f"{bp // 100},{bp % 100:02d}".rstrip("0").rstrip(",")
+    return texto + "%"
+
+
+def comissao_centavos(valor_centavos, bp):
+    """Comissão sobre a mão de obra, arredondada ao centavo."""
+    return (valor_centavos * bp + 5000) // 10000
+
+
+def agrupar_comissoes(itens, comissionar=True):
+    """Agrupa serviços por profissional. Cada item: nome, placa, veiculo_id, tipo, problema, valor, bp, data."""
+    grupos = {}
+    for item in itens:
+        grupo = grupos.setdefault(item["nome"], {"nome": item["nome"], "servicos": 0, "mao_de_obra": 0,
+                                                 "comissao": 0, "itens": []})
+        item["comissao"] = comissao_centavos(item["valor"], item["bp"]) if comissionar and item["bp"] else 0
+        grupo["servicos"] += 1
+        grupo["mao_de_obra"] += item["valor"]
+        grupo["comissao"] += item["comissao"]
+        grupo["itens"].append(item)
+    return sorted(grupos.values(), key=lambda g: (-g["comissao"], g["nome"]))
+
+
+def montar_comissoes(db, ano, mes):
+    """Comissões do mês (serviços de carros ENTREGUES no mês, com o percentual guardado na entrega), serviços
+    entregues sem profissional e o que está previsto (carros ainda não entregues, com o percentual de hoje)."""
+    prefixo = f"{ano:04d}-{mes:02d}-"
+    entregues, sem_profissional = [], []
+    for i in db.execute("SELECT i.*, e.data_entrega, v.placa, v.id AS veiculo_id FROM entrega_itens i "
+                        "JOIN entregas e ON e.id = i.entrega_id JOIN veiculos v ON v.id = e.veiculo_id "
+                        "WHERE e.data_entrega LIKE ? ORDER BY e.data_entrega, i.id", (prefixo + "%",)):
+        item = {"nome": i["profissional_nome"], "placa": i["placa"], "veiculo_id": i["veiculo_id"], "tipo": i["tipo"],
+                "problema": i["problema"], "valor": i["valor_centavos"], "bp": i["comissao_bp"],
+                "data": i["data_entrega"]}
+        (entregues if i["profissional_nome"] else sem_profissional).append(item)
+    previstos = []
+    for sv in db.execute("SELECT s.*, p.nome AS profissional_nome, p.percentual_bp, v.placa FROM servicos s "
+                         "JOIN profissionais p ON p.id = s.profissional_id JOIN veiculos v ON v.id = s.veiculo_id "
+                         "WHERE s.valor_centavos IS NOT NULL AND NOT EXISTS "
+                         "(SELECT 1 FROM entregas e WHERE e.veiculo_id = s.veiculo_id) ORDER BY s.id"):
+        previstos.append({"nome": sv["profissional_nome"], "placa": sv["placa"], "veiculo_id": sv["veiculo_id"],
+                          "tipo": sv["tipo"], "problema": sv["problema"], "valor": sv["valor_centavos"],
+                          "bp": sv["percentual_bp"], "data": None})
+    grupos = agrupar_comissoes(entregues)
+    return {"grupos": grupos, "total_comissao": sum(g["comissao"] for g in grupos),
+            "total_mao_de_obra": sum(g["mao_de_obra"] for g in grupos),
+            "sem_profissional": agrupar_comissoes([dict(i, nome="Sem profissional") for i in sem_profissional], False),
+            "previstos": agrupar_comissoes(previstos),
+            "total_previsto": sum(g["comissao"] for g in agrupar_comissoes(previstos))}
+
+
 MESES_EXTENSO = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
                  "outubro", "novembro", "dezembro")
 DIAS_AVISO_GARANTIA = 30             # garantias que vencem nesse prazo aparecem no relatório
@@ -2428,12 +2521,18 @@ def fechar_entrega(id):
                             (id, hoje.isoformat(), condicoes or None, total, g.usuario["nome"]))
         for s in servicos:
             ate = fim_da_garantia(hoje, s["garantia_valor"], s["garantia_unidade"])
+            profissional = (db.execute("SELECT * FROM profissionais WHERE id = ?", (s["profissional_id"],)).fetchone()
+                            if s["profissional_id"] else None)
             item = db.execute("INSERT INTO entrega_itens (entrega_id, servico_id, tipo, problema, como_resolver, "
-                              "valor_centavos, garantia_valor, garantia_unidade, garantia_ate, pecas_centavos) "
-                              "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                              "valor_centavos, garantia_valor, garantia_unidade, garantia_ate, pecas_centavos, "
+                              "profissional_id, profissional_nome, comissao_bp) "
+                              "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                               (cursor.lastrowid, s["id"], s["tipo"], s["problema"], s["como_resolver"],
                                s["valor_centavos"], s["garantia_valor"], s["garantia_unidade"],
-                               ate.isoformat() if ate else None, s["pecas_centavos"]))
+                               ate.isoformat() if ate else None, s["pecas_centavos"],
+                               profissional["id"] if profissional else None,
+                               profissional["nome"] if profissional else None,
+                               profissional["percentual_bp"] if profissional else None))
             db.execute("INSERT INTO entrega_pecas (entrega_item_id, nome, quantidade, preco_centavos) "
                        "SELECT ?, nome, quantidade, preco_centavos FROM servico_pecas WHERE servico_id = ? ORDER BY id",
                        (item.lastrowid, s["id"]))
@@ -2755,6 +2854,111 @@ def registrar_aviso(id):
                        (id, tipo, pendente["marca_meses"], g.usuario["nome"]))
     db.commit()
     return redirect(url_for("avisos"))
+
+
+@app.route("/profissionais", methods=["GET", "POST"])
+def profissionais():
+    """Só o dono: cadastro dos profissionais que recebem comissão (nome e percentual sobre a mão de obra)."""
+    so_dono()
+    db = get_db()
+    erros, dados = [], {}
+    if request.method == "POST":
+        nome = " ".join(request.form.get("nome", "").split())
+        bp = interpretar_percentual(request.form.get("percentual", ""))
+        dados = {"nome": nome, "percentual": request.form.get("percentual", "")}
+        if not nome:
+            erros.append("Escreva o nome do profissional.")
+        elif len(nome) > MAX_NOME_PROFISSIONAL:
+            erros.append(f"O nome pode ter no máximo {MAX_NOME_PROFISSIONAL} letras.")
+        elif any(normalizar(p["nome"]) == normalizar(nome) for p in db.execute("SELECT nome FROM profissionais")):
+            erros.append("Já existe um profissional com esse nome.")
+        if bp is None:
+            erros.append("Informe o percentual de comissão, de 0,01 a 100 (exemplo: 30 ou 12,5).")
+        if not erros:
+            db.execute("INSERT INTO profissionais (nome, percentual_bp) VALUES (?, ?)", (nome, bp))
+            db.commit()
+            return redirect(url_for("profissionais"))
+    lista = db.execute("SELECT * FROM profissionais ORDER BY ativo DESC, nome").fetchall()
+    return render_template("profissionais.html", lista=lista, erros=erros, dados=dados,
+                           max_nome=MAX_NOME_PROFISSIONAL, texto_percentual=texto_percentual)
+
+
+@app.route("/profissionais/<int:id>/editar", methods=["POST"])
+def editar_profissional(id):
+    """Só o dono muda o nome ou o percentual. O percentual novo vale só para serviços entregues daqui para frente."""
+    so_dono()
+    db = get_db()
+    atual = db.execute("SELECT * FROM profissionais WHERE id = ?", (id,)).fetchone()
+    if not atual:
+        abort(404)
+    nome = " ".join(request.form.get("nome", "").split())
+    bp = interpretar_percentual(request.form.get("percentual", ""))
+    erros = []
+    if not nome:
+        erros.append("Escreva o nome do profissional.")
+    elif len(nome) > MAX_NOME_PROFISSIONAL:
+        erros.append(f"O nome pode ter no máximo {MAX_NOME_PROFISSIONAL} letras.")
+    elif any(normalizar(p["nome"]) == normalizar(nome)
+             for p in db.execute("SELECT nome FROM profissionais WHERE id != ?", (id,))):
+        erros.append("Já existe um profissional com esse nome.")
+    if bp is None:
+        erros.append("Informe o percentual de comissão, de 0,01 a 100 (exemplo: 30 ou 12,5).")
+    if erros:
+        lista = db.execute("SELECT * FROM profissionais ORDER BY ativo DESC, nome").fetchall()
+        return render_template("profissionais.html", lista=lista, erros=erros, dados={}, max_nome=MAX_NOME_PROFISSIONAL,
+                               texto_percentual=texto_percentual)
+    db.execute("UPDATE profissionais SET nome = ?, percentual_bp = ? WHERE id = ?", (nome, bp, id))
+    db.commit()
+    return redirect(url_for("profissionais"))
+
+
+@app.route("/profissionais/<int:id>/ativo", methods=["POST"])
+def alternar_profissional(id):
+    """Só o dono ativa ou desativa um profissional (quem saiu da oficina). Os serviços antigos não mudam."""
+    so_dono()
+    db = get_db()
+    atual = db.execute("SELECT * FROM profissionais WHERE id = ?", (id,)).fetchone()
+    if not atual:
+        abort(404)
+    db.execute("UPDATE profissionais SET ativo = ? WHERE id = ?", (0 if atual["ativo"] else 1, id))
+    db.commit()
+    return redirect(url_for("profissionais"))
+
+
+@app.route("/comissoes")
+def comissoes():
+    """Só o dono: comissão por profissional no mês (carros entregues no mês), mais o que está previsto."""
+    so_dono()
+    hoje = hoje_brasil()
+    ano, mes = interpretar_mes(request.args.get("mes"), hoje)
+    anterior = (ano - 1, 12) if mes == 1 else (ano, mes - 1)
+    seguinte = (ano + 1, 1) if mes == 12 else (ano, mes + 1)
+    return render_template("comissoes.html", dados=montar_comissoes(get_db(), ano, mes),
+                           mes_texto=f"{MESES_EXTENSO[mes - 1]} de {ano}", mes_valor=f"{ano:04d}-{mes:02d}",
+                           anterior=f"{anterior[0]:04d}-{anterior[1]:02d}", seguinte=f"{seguinte[0]:04d}-{seguinte[1]:02d}",
+                           mes_atual=f"{hoje.year:04d}-{hoje.month:02d}", formatar_data=formatar_data,
+                           formatar_dinheiro=formatar_dinheiro, texto_percentual=texto_percentual)
+
+
+@app.route("/veiculos/<int:id>/servicos/<int:servico_id>/profissional", methods=["POST"])
+def registrar_profissional(id, servico_id):
+    """Só o dono escolhe quem executou o serviço (para a comissão). Vazio tira o profissional. Travado após a entrega."""
+    so_dono()
+    db = get_db()
+    buscar_veiculo(db, id)
+    servico = db.execute("SELECT * FROM servicos WHERE id = ? AND veiculo_id = ?", (servico_id, id)).fetchone()
+    if not servico:
+        abort(404)
+    texto = request.form.get("profissional_id", "").strip()
+    novo = None
+    if texto:
+        profissional = db.execute("SELECT * FROM profissionais WHERE id = ?", (texto,)).fetchone() if texto.isdigit() else None
+        if not profissional or (not profissional["ativo"] and profissional["id"] != servico["profissional_id"]):
+            return pagina_veiculo(id, ["Escolha um profissional da lista."])
+        novo = profissional["id"]
+    db.execute("UPDATE servicos SET profissional_id = ? WHERE id = ?", (novo, servico_id))
+    db.commit()
+    return redirect(url_for("ver_veiculo", id=id))
 
 
 @app.route("/veiculos/<int:id>/arquivar", methods=["POST"])

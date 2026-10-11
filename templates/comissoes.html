@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comissões - Oficina Itamaracá</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+    <div class="nao-imprimir">{% include '_menu.html' %}</div>
+    <h1>Comissões de {{ mes_texto }}</h1>
+    <p class="nao-imprimir navegacao-mes navegacao-mes-comissao">
+        <a href="{{ url_for('comissoes', mes=anterior) }}">&larr; Mês anterior</a>
+        <a href="{{ url_for('comissoes', mes=seguinte) }}">Mês seguinte &rarr;</a>
+        {% if mes_valor != mes_atual %}<a href="{{ url_for('comissoes') }}">Este mês</a>{% endif %}
+        <a href="{{ url_for('profissionais') }}">👷 Profissionais e percentuais</a>
+        <button type="button" onclick="window.print()">🖨️ Imprimir</button>
+    </p>
+    <p class="pequeno">Conta os serviços de carros <strong>entregues</strong> neste mês, sobre a mão de obra (sem as peças),
+        com o percentual que valia na entrega.</p>
+
+    <h2>Comissão do mês</h2>
+    {% if dados['grupos'] %}
+    <table class="relatorio">
+        <tr><th>Profissional</th><th class="num">Serviços</th><th class="num">Mão de obra</th><th class="num">Comissão</th></tr>
+        {% for g in dados['grupos'] %}
+        <tr><td>{{ g['nome'] }}</td><td class="num">{{ g['servicos'] }}</td>
+            <td class="num">{{ formatar_dinheiro(g['mao_de_obra']) }}</td>
+            <td class="num"><strong>{{ formatar_dinheiro(g['comissao']) }}</strong></td></tr>
+        {% endfor %}
+        <tr class="total"><td colspan="2">Total</td><td class="num">{{ formatar_dinheiro(dados['total_mao_de_obra']) }}</td>
+            <td class="num">{{ formatar_dinheiro(dados['total_comissao']) }}</td></tr>
+    </table>
+
+    {% for g in dados['grupos'] %}
+    <details class="comissao-detalhe">
+        <summary>{{ g['nome'] }}: {{ g['servicos'] }} {{ 'serviço' if g['servicos'] == 1 else 'serviços' }},
+            {{ formatar_dinheiro(g['comissao']) }}</summary>
+        <table class="relatorio">
+            <tr><th>Entrega</th><th>Placa</th><th>Serviço</th><th class="num">Mão de obra</th><th class="num">%</th><th class="num">Comissão</th></tr>
+            {% for i in g['itens'] %}
+            <tr><td>{{ formatar_data(i['data']) }}</td>
+                <td><a href="{{ url_for('ver_veiculo', id=i['veiculo_id']) }}">{{ i['placa'] }}</a></td>
+                <td>{{ i['tipo'] }}: {{ i['problema'] }}</td>
+                <td class="num">{{ formatar_dinheiro(i['valor']) }}</td>
+                <td class="num">{{ texto_percentual(i['bp']) }}</td>
+                <td class="num">{{ formatar_dinheiro(i['comissao']) }}</td></tr>
+            {% endfor %}
+        </table>
+    </details>
+    {% endfor %}
+    {% else %}
+    <p>Nenhum serviço com profissional foi entregue neste mês.</p>
+    {% endif %}
+
+    {% if dados['sem_profissional'] %}
+    <h2>Serviços entregues sem profissional</h2>
+    <p class="pequeno">Não geram comissão. Se faltou informar, não dá para corrigir depois da entrega: escolha o profissional
+        em cada serviço antes de fechar a entrega.</p>
+    {% for g in dados['sem_profissional'] %}
+    <table class="relatorio">
+        <tr><th>Entrega</th><th>Placa</th><th>Serviço</th><th class="num">Mão de obra</th></tr>
+        {% for i in g['itens'] %}
+        <tr><td>{{ formatar_data(i['data']) }}</td>
+            <td><a href="{{ url_for('ver_veiculo', id=i['veiculo_id']) }}">{{ i['placa'] }}</a></td>
+            <td>{{ i['tipo'] }}: {{ i['problema'] }}</td>
+            <td class="num">{{ formatar_dinheiro(i['valor']) }}</td></tr>
+        {% endfor %}
+    </table>
+    {% endfor %}
+    {% endif %}
+
+    <h2>Previsto (carros ainda não entregues)</h2>
+    {% if dados['previstos'] %}
+    <table class="relatorio">
+        <tr><th>Profissional</th><th class="num">Serviços</th><th class="num">Mão de obra</th><th class="num">Comissão prevista</th></tr>
+        {% for g in dados['previstos'] %}
+        <tr><td>{{ g['nome'] }}</td><td class="num">{{ g['servicos'] }}</td>
+            <td class="num">{{ formatar_dinheiro(g['mao_de_obra']) }}</td>
+            <td class="num">{{ formatar_dinheiro(g['comissao']) }}</td></tr>
+        {% endfor %}
+        <tr class="total"><td colspan="3">Total previsto</td><td class="num">{{ formatar_dinheiro(dados['total_previsto']) }}</td></tr>
+    </table>
+    <p class="pequeno">Usa o percentual de hoje e só entra na conta do mês em que o carro for entregue.</p>
+    {% else %}
+    <p>Nenhum serviço em andamento com profissional e valor definidos.</p>
+    {% endif %}
+</body>
+</html>

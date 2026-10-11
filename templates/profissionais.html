@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profissionais - Oficina Itamaracá</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+    {% include '_menu.html' %}
+    <h1>Profissionais e comissão</h1>
+    <p><a href="{{ url_for('comissoes') }}">&larr; Voltar às comissões</a></p>
+    <p class="pequeno">A comissão é um percentual sobre a <strong>mão de obra</strong> do serviço (as peças ficam fora).
+        Mudar o percentual vale só para serviços entregues <strong>daqui para frente</strong>: o que já foi entregue
+        guarda o percentual da época.</p>
+
+    {% if erros %}
+    <div class="erros" data-erro-formulario>
+        <ul>{% for erro in erros %}<li>{{ erro }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+
+    <h2>Novo profissional</h2>
+    <form method="POST" action="{{ url_for('profissionais') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="nome">Nome</label>
+        <input type="text" id="nome" name="nome" maxlength="{{ max_nome }}" value="{{ dados.get('nome', '') }}">
+        <label for="percentual">Comissão (%)</label>
+        <input type="text" id="percentual" name="percentual" inputmode="decimal" placeholder="30"
+               value="{{ dados.get('percentual', '') }}">
+        <button type="submit">Cadastrar</button>
+    </form>
+
+    <h2>Quem recebe comissão</h2>
+    {% if lista %}
+    <div class="tabela-rolavel">
+    <table class="relatorio">
+        <tr><th>Nome</th><th>Comissão</th><th>Situação</th><th>Ações</th></tr>
+        {% for p in lista %}
+        <tr class="profissional-linha {{ '' if p['ativo'] else 'profissional-inativo' }}">
+            <td colspan="2">
+                <form method="POST" action="{{ url_for('editar_profissional', id=p['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="text" name="nome" maxlength="{{ max_nome }}" value="{{ p['nome'] }}" aria-label="Nome">
+                    <input type="text" name="percentual" inputmode="decimal" size="6" aria-label="Percentual de comissão"
+                           value="{{ texto_percentual(p['percentual_bp'])|replace('%', '') }}"> %
+                    <button type="submit">Salvar</button>
+                </form>
+            </td>
+            <td>{{ 'Ativo' if p['ativo'] else 'Inativo' }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('alternar_profissional', id=p['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="secundario">{{ 'Desativar' if p['ativo'] else 'Ativar' }}</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    </div>
+    <p class="pequeno">Profissional inativo não aparece para novos serviços, mas os serviços antigos continuam com ele.</p>
+    {% else %}
+    <p>Nenhum profissional cadastrado ainda.</p>
+    {% endif %}
+</body>
+</html>
