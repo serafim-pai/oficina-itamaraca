@@ -15,7 +15,8 @@ class ExigirProntoTest(test_entrega.EntregaBase):
 
     def fechar_sem_marcar(self):
         return self.dono_c.post(f"/veiculos/{self.vid}/entrega", content_type="multipart/form-data", data={
-            "condicoes": CONDICOES, "assinatura": self.assinatura(), "fotos_entrega": foto_de_entrega()})
+            "condicoes": CONDICOES, "assinatura": self.assinatura(), "fotos_entrega": foto_de_entrega(),
+            "liberar_saldo": "on", "motivo_saldo": "Teste"})
 
     def etapa(self, etapa):
         self.func.post(f"/veiculos/{self.vid}/etapa", data={"etapa": etapa})

@@ -57,7 +57,7 @@ class EntregaBase(BaseTest):
         self.marcar_pronto(self.vid)
         return cliente.post(f"/veiculos/{self.vid}/entrega", content_type="multipart/form-data", data={
             "condicoes": condicoes, "assinatura": self.assinatura(cliente) if assinatura is ... else assinatura,
-            "fotos_entrega": foto_de_entrega()})
+            "fotos_entrega": foto_de_entrega(), "liberar_saldo": "on", "motivo_saldo": "Teste"})
 
     def entregas(self):
         return self.sql("SELECT * FROM entregas ORDER BY id")

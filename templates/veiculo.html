@@ -728,6 +728,11 @@
             Entrega fechada por {{ entrega['entregue_por'] }} em {{ entrega['criado_em']|hora_brasil }}<br>
             Valor total: {{ formatar_dinheiro(entrega['total_centavos']) }}
         </p>
+        {% if entrega['saldo_liberado_centavos'] %}
+        <div class="aviso-custo">⚠️ Entregue com <strong>saldo a receber de {{ formatar_dinheiro(entrega['saldo_liberado_centavos']) }}</strong>,
+            liberado por {{ entrega['saldo_liberado_por'] }}. Motivo: {{ entrega['saldo_liberado_motivo'] }}.
+            O carro aparece na tela <strong>💰 A receber</strong> até o pagamento ser registrado.</div>
+        {% endif %}
         <div class="tabela-rolavel">
         <table>
             <tr><th>Serviço</th><th>Garantia</th><th>Situação</th></tr>
@@ -793,6 +798,15 @@
             <label for="condicoes">Condições que cancelam a garantia *</label>
             <textarea id="condicoes" name="condicoes" rows="9" maxlength="{{ max_condicoes }}">{{ dados.get('condicoes', condicoes_padrao) }}</textarea>
             <span class="aviso">Este texto aparece no comprovante entregue ao cliente. O texto acima é uma sugestão: edite como quiser.</span>
+            {% if pagamento and pagamento['falta'] > 0 %}
+            <div class="aviso-custo">⚠️ <strong>Falta receber {{ formatar_dinheiro(pagamento['falta']) }}.</strong>
+                A entrega só fecha com o pagamento completo (registre em <strong>💰 Pagamento</strong>, logo abaixo) ou com a sua autorização:
+                <label class="luz"><input type="checkbox" name="liberar_saldo" {{ 'checked' if dados.get('liberar_saldo') }}>
+                    Entregar mesmo com saldo a receber</label>
+                <input type="text" name="motivo_saldo" maxlength="{{ max_motivo_saldo }}" value="{{ dados.get('motivo_saldo', '') }}"
+                       placeholder="Motivo (exemplo: cliente conhecido, paga na sexta)" aria-label="Motivo de entregar com saldo a receber">
+            </div>
+            {% endif %}
             <button type="submit" {{ 'disabled' if sem_garantia_informada }}>Fechar a entrega de hoje</button>
         </form>
         {% endif %}

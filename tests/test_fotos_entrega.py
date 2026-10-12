@@ -57,7 +57,8 @@ class Base(BaseTest):
             fotos = [foto_de_entrega()]
         return (cliente or self.dono_c).post(
             f"/veiculos/{vid}/entrega", content_type="multipart/form-data",
-            data={"condicoes": condicoes, "assinatura": self.assinatura(vid), "fotos_entrega": fotos})
+            data={"condicoes": condicoes, "assinatura": self.assinatura(vid), "fotos_entrega": fotos,
+                  "liberar_saldo": "on", "motivo_saldo": "Teste"})
 
     def desfazer(self, vid=None):
         return self.dono_c.post(f"/veiculos/{vid or self.vid}/entrega/desfazer", data={"motivo": "Cliente pediu uma correção"})
@@ -168,7 +169,7 @@ class ObrigatoriedadeDaFotoTest(Base):
             self.marcar_pronto(self.vid)
             r = self.dono_c.post(f"/veiculos/{self.vid}/entrega", content_type="multipart/form-data",
                                  data={"condicoes": CONDICOES, "assinatura": assinatura,
-                                       "fotos_entrega": [foto_de_entrega()]})
+                                       "fotos_entrega": [foto_de_entrega()], "liberar_saldo": "on", "motivo_saldo": "Teste"})
             self.assertEqual(r.status_code, 500)
         finally:
             self.sql("ALTER TABLE fotos_x RENAME TO fotos")

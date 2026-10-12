@@ -64,6 +64,7 @@ MAX_LUZ_OUTRA = 60                   # letras do nome da outra luz
 MAX_ITENS_OUTROS = 100               # letras dos outros pertences deixados no carro
 MAX_AVARIAS = 500                    # letras das avarias que o carro já tinha
 MAX_NOME_PROFISSIONAL = 60            # letras do nome de um profissional (comissão)
+MAX_MOTIVO_SALDO = 200                                          # letras do motivo de entregar com saldo a receber
 MAX_OBS_PAGAMENTO = 100                                         # letras da observação de um pagamento
 MAX_MOTIVO_PAGAMENTO = 300                                      # letras do motivo de apagar um pagamento
 FORMAS_PAGAMENTO = {"PIX": "Pix", "DINHEIRO": "Dinheiro", "DEBITO": "Cartão de débito",
@@ -592,6 +593,11 @@ def init_db():
         db.execute("ALTER TABLE entrega_itens ADD COLUMN profissional_nome TEXT")
     if "comissao_bp" not in colunas_itens:
         db.execute("ALTER TABLE entrega_itens ADD COLUMN comissao_bp INTEGER")
+    colunas_entregas = [c[1] for c in db.execute("PRAGMA table_info(entregas)")]
+    for coluna, tipo in (("saldo_liberado_centavos", "INTEGER"), ("saldo_liberado_motivo", "TEXT"),
+                         ("saldo_liberado_por", "TEXT")):
+        if coluna not in colunas_entregas:
+            db.execute(f"ALTER TABLE entregas ADD COLUMN {coluna} {tipo}")
     if "arquivado" not in colunas_veiculos:
         db.execute("ALTER TABLE veiculos ADD COLUMN arquivado INTEGER NOT NULL DEFAULT 0")
     # Fotos da entrega: "momento" diz quando a foto foi tirada. ENTRADA (as que já existiam), ENTREGA, ou
@@ -1635,7 +1641,7 @@ def pagina_veiculo(id, erros=None, dados=None, recem_cadastrado=False, destacar_
                            conf=conferencia(veiculo), tem_luzes=tem_luzes_acesas(veiculo),
                            luzes_painel=LUZES_PAINEL, combustiveis=COMBUSTIVEIS, itens_deixados=ITENS_DEIXADOS,
                            max_luz_outra=MAX_LUZ_OUTRA, max_itens_outros=MAX_ITENS_OUTROS, max_avarias=MAX_AVARIAS,
-                           pagamento=pagamento, formas_pagamento=FORMAS_PAGAMENTO,
+                           max_motivo_saldo=MAX_MOTIVO_SALDO, pagamento=pagamento, formas_pagamento=FORMAS_PAGAMENTO,
                            max_obs_pagamento=MAX_OBS_PAGAMENTO, max_motivo_pagamento=MAX_MOTIVO_PAGAMENTO,
                            arquivamento=arquivamento, max_motivo_arquivar=MAX_MOTIVO_ARQUIVAR,
                            passagens=passagens_anteriores(db, veiculo, hoje), max_dado_veiculo=MAX_DADO_VEICULO, max_nome_peca=MAX_NOME_PECA_COMPRA, situacoes_peca=SITUACOES_PECA,
@@ -2533,6 +2539,18 @@ def fechar_entrega(id):
         erros.append("Escreva as condições que cancelam a garantia (aparecem no comprovante do cliente).")
     if len(condicoes) > MAX_CONDICOES:
         erros.append(f"As condições podem ter no máximo {MAX_CONDICOES} letras.")
+    # Saldo a receber: a entrega só fecha com o pagamento completo ou com a liberação do dono (com motivo)
+    saldo = dados_de_pagamento(db, id)["falta"]
+    liberar_saldo = request.form.get("liberar_saldo") == "on"
+    motivo_saldo = " ".join(request.form.get("motivo_saldo", "").split())
+    if saldo > 0:
+        if not liberar_saldo:
+            erros.append(f"Falta receber {formatar_dinheiro(saldo)}. Registre o pagamento em \"Pagamento\" ou marque "
+                         "\"Entregar mesmo com saldo a receber\" e escreva o motivo.")
+        elif sum(1 for letra in motivo_saldo if letra.isalpha()) < 3:
+            erros.append("Explique o motivo de entregar com saldo a receber.")
+        elif len(motivo_saldo) > MAX_MOTIVO_SALDO:
+            erros.append(f"O motivo pode ter no máximo {MAX_MOTIVO_SALDO} letras.")
     # Fotos do veículo na entrega: obrigatórias (são a prova do estado em que o carro saiu)
     erros_fotos, fotos_entrega, enviadas = preparar_fotos_enviadas("fotos_entrega")
     erros += erros_fotos
@@ -2541,14 +2559,18 @@ def fechar_entrega(id):
     if erros:
         if enviadas:
             erros.append("Por segurança do navegador, as fotos precisam ser escolhidas de novo.")
-        return pagina_veiculo(id, erros, {"condicoes": condicoes})
+        return pagina_veiculo(id, erros, {"condicoes": condicoes, "liberar_saldo": liberar_saldo,
+                                          "motivo_saldo": motivo_saldo})
 
     total = sum(s["valor_centavos"] + s["pecas_centavos"] for s in servicos)
     criados = []
     try:
-        cursor = db.execute("INSERT INTO entregas (veiculo_id, data_entrega, condicoes, total_centavos, entregue_por) "
-                            "VALUES (?, ?, ?, ?, ?)",
-                            (id, hoje.isoformat(), condicoes or None, total, g.usuario["nome"]))
+        cursor = db.execute("INSERT INTO entregas (veiculo_id, data_entrega, condicoes, total_centavos, entregue_por, "
+                            "saldo_liberado_centavos, saldo_liberado_motivo, saldo_liberado_por) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            (id, hoje.isoformat(), condicoes or None, total, g.usuario["nome"],
+                             saldo if saldo > 0 else None, motivo_saldo if saldo > 0 else None,
+                             g.usuario["nome"] if saldo > 0 else None))
         for s in servicos:
             ate = fim_da_garantia(hoje, s["garantia_valor"], s["garantia_unidade"])
             profissional = (db.execute("SELECT * FROM profissionais WHERE id = ?", (s["profissional_id"],)).fetchone()

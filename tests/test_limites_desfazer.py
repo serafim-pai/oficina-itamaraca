@@ -218,7 +218,8 @@ class DesfazerEntregaTest(Base):
         vid = vid or self.vid
         self.marcar_pronto(vid)
         return self.dono_c.post(f"/veiculos/{vid}/entrega", content_type="multipart/form-data",
-                                data={"condicoes": CONDICOES, "assinatura": self.assinatura(vid), "fotos_entrega": foto_de_entrega()})
+                                data={"condicoes": CONDICOES, "assinatura": self.assinatura(vid), "fotos_entrega": foto_de_entrega(),
+                                      "liberar_saldo": "on", "motivo_saldo": "Teste"})
 
     def desfazer(self, motivo="Cliente pediu para trocar o serviço de pintura", cliente=None, vid=None):
         return (cliente or self.dono_c).post(f"/veiculos/{vid or self.vid}/entrega/desfazer", data={"motivo": motivo})
