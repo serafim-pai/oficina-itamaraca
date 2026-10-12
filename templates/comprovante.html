@@ -61,6 +61,10 @@
             </tr>
             {% endfor %}
             <tr class="total"><td colspan="2">Valor total</td><td class="num">{{ formatar_dinheiro(entrega['total_centavos']) }}</td><td colspan="2"></td></tr>
+            {% if conta['falta'] > 0 %}
+            {% if conta['pago'] > 0 %}<tr><td colspan="2">Já recebido</td><td class="num">{{ formatar_dinheiro(conta['pago']) }}</td><td colspan="2"></td></tr>{% endif %}
+            <tr class="total"><td colspan="2">Saldo a receber</td><td class="num">{{ formatar_dinheiro(conta['falta']) }}</td><td colspan="2"></td></tr>
+            {% endif %}
         </table>
 
         {% if entrega['condicoes'] %}

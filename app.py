@@ -2627,7 +2627,7 @@ def comprovante(id):
     for p in db.execute("SELECT ep.* FROM entrega_pecas ep JOIN entrega_itens ei ON ei.id = ep.entrega_item_id "
                         "WHERE ei.entrega_id = ? ORDER BY ep.id", (entrega["id"],)):
         pecas_entrega.setdefault(p["entrega_item_id"], []).append(p)
-    return render_template("comprovante.html", conf=conferencia(veiculo), pecas_entrega=pecas_entrega, fotos_problema=fotos_problema, veiculo=veiculo, entrega=entrega, itens=itens, aprovacao=aprovacao,
+    return render_template("comprovante.html", conta=dados_de_pagamento(db, id), conf=conferencia(veiculo), pecas_entrega=pecas_entrega, fotos_problema=fotos_problema, veiculo=veiculo, entrega=entrega, itens=itens, aprovacao=aprovacao,
                            fotos_entrega=fotos_entrega,
                            formatar_data=formatar_data, formatar_dinheiro=formatar_dinheiro,
                            texto_garantia=texto_garantia, nomes_formas=NOMES_FORMAS_APROVACAO)
